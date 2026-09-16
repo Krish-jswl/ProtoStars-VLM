@@ -3,24 +3,45 @@
 
 WebGPU is preferred for supported local vision models, but OCR currently uses a WASM backend through Tesseract.js. The OCR provider is abstracted so a WebGPU implementation can be added later.
 
-## Privacy Boundary
+## Observe → Reason → Act Loop
 
-RAW PAGE DATA
+OBSERVE
 ↓
-LOCAL DETECTION
+LOCAL PRIVACY PIPELINE
+ → DOM Analysis
+ → Screenshot Capture
+ → OCR (event-driven)
+ → PII Detection + Fusion
+ → Redaction (opaque visual + DOM token replacement)
 ↓
-LOCAL REDACTION
+PRIVACY GATE (fail-closed)
 ↓
-LOCAL VERIFICATION
+SANITIZED CONTEXT (no PII)
 ↓
-PRIVACY GATE
+POST /v1/agent/plan → FastAPI Backend
 ↓
-SANITIZED CONTEXT
+VLM PROVIDER (MockVLM / future real provider)
 ↓
-POST /v1/agent/plan (FastAPI Backend)
+STRUCTURED ACTION PLAN
 ↓
-VLM PROVIDER
+LOCAL ACTION VALIDATOR
+ → action type in allowlist
+ → target exists in DOM
+ → target visible and enabled
+ → re-check freshness before execution
 ↓
-STRUCTURED ACTIONS
+BROWSER EXECUTOR
+↓
+OBSERVE AGAIN
 
 **The backend never receives raw browser context.**
+
+**The server proposes actions, but the browser is the final authority.**
+
+The network layer must never receive raw page context.
+
+## Privacy Invariants
+- If privacy gate returns allowed=false → zero network traffic.
+- All PII regions are replaced with opaque black boxes before image leaves device.
+- DOM sensitive text is replaced with semantic tokens [TYPE_N] before leaving device.
+- type_local actions resolve secrets locally; the server only receives a secret_ref name.
