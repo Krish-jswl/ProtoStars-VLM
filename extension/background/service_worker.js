@@ -9,5 +9,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         console.log(`[LOG]`, request.payload);
         sendResponse({status: 'LOG_RECEIVED'});
     }
+    
+    if (request.type === 'CAPTURE_TAB') {
+        chrome.tabs.captureVisibleTab(null, {format: 'jpeg', quality: 80}, (dataUri) => {
+            sendResponse({ dataUri });
+        });
+    }
     return true; // async
+
 });
