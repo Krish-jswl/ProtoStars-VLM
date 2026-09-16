@@ -1,0 +1,48 @@
+{
+  "page": "ecommerce_checkout.html",
+  "pii": [
+    {
+      "type": "PERSON",
+      "element_id": "ship-name",
+      "value_hash": "sneha_name",
+      "sensitive": true
+    },
+    {
+      "type": "ADDRESS",
+      "element_id": "ship-address",
+      "value_hash": "sneha_addr",
+      "sensitive": true
+    },
+    {
+      "type": "PHONE",
+      "element_id": "ship-phone",
+      "value_hash": "sneha_phone",
+      "sensitive": true
+    },
+    {
+      "type": "CREDIT_CARD",
+      "element_id": "card-number",
+      "value_hash": "test_card",
+      "sensitive": true
+    }
+  ],
+  "non_sensitive": [
+    {
+      "element_id": "product-1",
+      "text_contains": "Headphones"
+    },
+    {
+      "element_id": "product-2",
+      "text_contains": "Cable"
+    },
+    {
+      "element_id": "pay-btn",
+      "text_contains": "Pay"
+    }
+  ],
+  "expected_ui_elements": [
+    "pay-btn",
+    "product-1",
+    "product-2"
+  ]
+}

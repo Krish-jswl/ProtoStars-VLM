@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Job Application</title>
+<style>body{font-family:sans-serif;max-width:600px;margin:40px auto}label{display:block;margin:10px 0 4px}input,textarea{width:100%;padding:6px;box-sizing:border-box}</style></head>
+<body>
+<h1>Apply for Software Engineer</h1>
+<form id="job-form">
+  <label for="fullname">Full Name</label>
+  <input id="fullname" type="text" autocomplete="name" value="Arjun Mehta" />
+  <label for="email">Email</label>
+  <input id="email" type="email" autocomplete="email" value="arjun.mehta@example.com" />
+  <label for="phone">Phone</label>
+  <input id="phone" type="tel" autocomplete="tel" value="+91 98765 43210" />
+  <label for="address">Address</label>
+  <textarea id="address" autocomplete="street-address">42 MG Road, Bengaluru, Karnataka 560001</textarea>
+  <label for="resume">Resume</label>
+  <input id="resume" type="file" accept=".pdf,.doc" />
+  <p id="public-info">We are an equal opportunity employer.</p>
+  <button id="submit-btn" type="submit">Submit Application</button>
+  <button id="cancel-btn" type="button">Cancel</button>
+</form>
+</body></html>

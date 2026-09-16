@@ -1,0 +1,43 @@
+{
+  "page": "travel_booking.html",
+  "pii": [
+    {
+      "type": "PERSON",
+      "element_id": "pax-name",
+      "value_hash": "rohan_name",
+      "sensitive": true
+    },
+    {
+      "type": "EMAIL",
+      "element_id": "pax-email",
+      "value_hash": "rohan_email",
+      "sensitive": true
+    },
+    {
+      "type": "PHONE",
+      "element_id": "pax-phone",
+      "value_hash": "rohan_phone",
+      "sensitive": true
+    },
+    {
+      "type": "CREDIT_CARD",
+      "element_id": "travel-card",
+      "value_hash": "travel_card",
+      "sensitive": true
+    }
+  ],
+  "non_sensitive": [
+    {
+      "element_id": "flight-info",
+      "text_contains": "AI-302"
+    },
+    {
+      "element_id": "book-btn",
+      "text_contains": "Book Now"
+    }
+  ],
+  "expected_ui_elements": [
+    "book-btn",
+    "cancel-booking"
+  ]
+}

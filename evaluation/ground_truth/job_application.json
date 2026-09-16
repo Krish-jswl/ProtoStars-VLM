@@ -1,0 +1,48 @@
+{
+  "page": "job_application.html",
+  "pii": [
+    {
+      "type": "PERSON",
+      "element_id": "fullname",
+      "value_hash": "arjun_mehta",
+      "sensitive": true
+    },
+    {
+      "type": "EMAIL",
+      "element_id": "email",
+      "value_hash": "arjun_email",
+      "sensitive": true
+    },
+    {
+      "type": "PHONE",
+      "element_id": "phone",
+      "value_hash": "arjun_phone",
+      "sensitive": true
+    },
+    {
+      "type": "ADDRESS",
+      "element_id": "address",
+      "value_hash": "arjun_addr",
+      "sensitive": true
+    }
+  ],
+  "non_sensitive": [
+    {
+      "element_id": "public-info",
+      "text_contains": "equal opportunity"
+    },
+    {
+      "element_id": "submit-btn",
+      "text_contains": "Submit"
+    },
+    {
+      "element_id": "cancel-btn",
+      "text_contains": "Cancel"
+    }
+  ],
+  "expected_ui_elements": [
+    "submit-btn",
+    "cancel-btn",
+    "resume"
+  ]
+}

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Checkout</title>
+<style>body{font-family:sans-serif;max-width:600px;margin:40px auto}label{display:block;margin:8px 0 4px}input{width:100%;padding:6px;box-sizing:border-box}.product{background:#f5f5f5;padding:12px;margin:8px 0;border-radius:4px}</style></head>
+<body>
+<h1>Checkout</h1>
+<div class="product" id="product-1"><strong>Wireless Headphones</strong> — ₹2,499</div>
+<div class="product" id="product-2"><strong>USB-C Cable</strong> — ₹399</div>
+<h2>Shipping</h2>
+<label for="ship-name">Name</label>
+<input id="ship-name" type="text" autocomplete="name" value="Sneha Reddy" />
+<label for="ship-address">Address</label>
+<input id="ship-address" type="text" autocomplete="street-address" value="15 Park Street, Hyderabad 500032" />
+<label for="ship-phone">Phone</label>
+<input id="ship-phone" type="tel" autocomplete="tel" value="+91 91234 56789" />
+<h2>Payment</h2>
+<label for="card-number">Card Number</label>
+<input id="card-number" type="text" autocomplete="cc-number" value="4111 1111 1111 1111" />
+<label for="card-expiry">Expiry</label>
+<input id="card-expiry" type="text" autocomplete="cc-exp" value="12/28" />
+<button id="pay-btn">Pay ₹2,898</button>
+</body></html>

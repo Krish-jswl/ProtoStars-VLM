@@ -1,0 +1,47 @@
+{
+  "page": "email_inbox.html",
+  "pii": [
+    {
+      "type": "PERSON",
+      "element_id": "email-1",
+      "value_hash": "priya_name",
+      "sensitive": true
+    },
+    {
+      "type": "EMAIL",
+      "element_id": "email-1",
+      "value_hash": "priya_email",
+      "sensitive": true
+    },
+    {
+      "type": "PERSON",
+      "element_id": "email-2",
+      "value_hash": "vikram_name",
+      "sensitive": true
+    },
+    {
+      "type": "EMAIL",
+      "element_id": "email-2",
+      "value_hash": "vikram_email",
+      "sensitive": true
+    },
+    {
+      "type": "PHONE",
+      "element_id": "email-2",
+      "value_hash": "vikram_phone",
+      "sensitive": true
+    }
+  ],
+  "non_sensitive": [
+    {
+      "element_id": "send-btn",
+      "text_contains": "Send"
+    }
+  ],
+  "expected_ui_elements": [
+    "send-btn",
+    "to-field",
+    "subject-field",
+    "body-field"
+  ]
+}
