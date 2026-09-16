@@ -5,6 +5,7 @@ import { PIIDetector } from '../privacy/pii_detector.js';
 import { PIIFusion } from '../privacy/pii_fusion.js';
 import { Redactor } from '../privacy/redactor.js';
 import { PrivacyGate } from '../privacy/privacy_gate.js';
+import { LocalSecretProvider } from '../privacy/secret_provider.js';
 import { Logger } from '../shared/logger.js';
 import { Config } from '../shared/config.js';
 
@@ -18,6 +19,7 @@ export class PrivacyPipelineRunner {
         this.fusion = new PIIFusion();
         this.redactor = new Redactor();
         this.gate = new PrivacyGate();
+        this.secretProvider = new LocalSecretProvider();
     }
 
     async run() {
@@ -44,9 +46,7 @@ export class PrivacyPipelineRunner {
         const processedCanvas = await this._preprocessImage(dataUri);
         timing.preprocess = performance.now() - t;
 
-        // 4. OCR (event-driven, no heavy NER yet)
-        // Skipped in loop unless DOM text is insufficient; OCR provider is async and heavy.
-        // For now, pass empty OCR results so PII detection is DOM+regex driven.
+        // 4. OCR — skipped in loop for now
         const ocrResults = [];
         timing.ocr = 0;
 
@@ -70,15 +70,8 @@ export class PrivacyPipelineRunner {
         const sanitizedDom = this.redactor.sanitizeDOM(domElements, plan);
 
         // 9. Build raw context for gate verification
-        const rawContext = {
-            dom: domElements,
-            scaleX: 1,
-            scaleY: 1
-        };
-        const sanitizedContext = {
-            dom: sanitizedDom,
-            image: redactedCanvas
-        };
+        const rawContext = { dom: domElements, scaleX: 1, scaleY: 1 };
+        const sanitizedContext = { dom: sanitizedDom, image: redactedCanvas };
 
         // 10. Privacy Gate
         t = performance.now();
@@ -117,7 +110,6 @@ export class PrivacyPipelineRunner {
     }
 
     async executeValidatedAction(action) {
-        // Re-validate target freshness before execution
         const ALLOWED = new Set(['click', 'scroll', 'focus', 'select', 'wait', 'type_local']);
         if (!ALLOWED.has(action.type)) {
             return { success: false, error: 'Action type not allowed' };
@@ -130,15 +122,48 @@ export class PrivacyPipelineRunner {
         }
 
         if (action.type === 'type_local') {
-            // Secret resolution happens locally; server only sends a ref
-            // For now, reject if no local secret available
-            return { success: false, error: 'type_local: no local secret store yet (Phase 7)' };
+            return this._executeTypeLocal(action);
+        }
+
+        const selector = action.target ? `#${action.target}` : null;
+        if (!selector) return { success: false, error: 'No target specified' };
+        return this.executor.execute(action.type, selector, action.args || {});
+    }
+
+    _executeTypeLocal(action) {
+        const secretRef = action.args?.secret_ref;
+        if (!secretRef) {
+            return { success: false, error: 'Missing secret_ref' };
+        }
+
+        if (!this.secretProvider.has(secretRef)) {
+            // Never reveal which refs exist in error messages
+            return { success: false, error: 'Secret not available' };
         }
 
         const selector = action.target ? `#${action.target}` : null;
         if (!selector) return { success: false, error: 'No target specified' };
 
-        return this.executor.execute(action.type, selector, action.args || {});
+        let element;
+        try {
+            element = document.querySelector(selector);
+        } catch(e) {
+            return { success: false, error: 'Invalid selector' };
+        }
+
+        const validation = LocalSecretProvider.validateTarget(element, secretRef);
+        if (!validation.valid) {
+            return { success: false, error: validation.reason };
+        }
+
+        // Resolve and insert — secret value stays in this function scope only
+        const value = this.secretProvider.get(secretRef);
+        if (!value) return { success: false, error: 'Secret not available' };
+
+        LocalSecretProvider.insertSecret(element, value);
+
+        // Return success. NEVER include secret value in result.
+        return { success: true };
     }
 
     async _preprocessImage(dataUri) {
