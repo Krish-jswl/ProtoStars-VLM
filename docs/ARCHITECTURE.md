@@ -17,6 +17,10 @@ PRIVACY GATE
 ↓
 SANITIZED CONTEXT
 ↓
-[future network request]
+POST /v1/agent/plan (FastAPI Backend)
+↓
+VLM PROVIDER
+↓
+STRUCTURED ACTIONS
 
-The network layer must never receive raw page context.
+**The backend never receives raw browser context.**
