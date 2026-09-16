@@ -3,11 +3,11 @@
     "pii": {
       "PERSON": {
         "tp": 1,
-        "fp": 1,
+        "fp": 0,
         "fn": 0,
-        "precision": 0.5,
+        "precision": 1,
         "recall": 1,
-        "f1": 0.6667
+        "f1": 1
       },
       "EMAIL": {
         "tp": 1,
@@ -18,12 +18,12 @@
         "f1": 1
       },
       "PHONE": {
-        "tp": 0,
-        "fp": 1,
-        "fn": 1,
-        "precision": 0,
-        "recall": 0,
-        "f1": 0
+        "tp": 1,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       },
       "ADDRESS": {
         "tp": 1,
@@ -34,46 +34,46 @@
         "f1": 1
       },
       "_aggregate": {
-        "tp": 3,
-        "fp": 2,
-        "fn": 1,
-        "precision": 0.6,
-        "recall": 0.75,
-        "f1": 0.6667
+        "tp": 4,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       }
     },
     "redaction": {
-      "covered": 3,
-      "underRedacted": 1,
-      "overRedacted": 1,
-      "coverage": 0.75,
-      "avgIoU": 0.75
+      "covered": 4,
+      "underRedacted": 0,
+      "overRedacted": 0,
+      "coverage": 1,
+      "avgIoU": 1
     },
     "context": {
-      "score": 7,
+      "score": 10,
       "total": 10,
-      "preservation": 0.7
+      "preservation": 1
     },
     "timing": {
       "dom": {
-        "median": 1.4,
-        "p95": 84.3,
-        "min": 1.21,
-        "max": 84.3,
+        "median": 2.45,
+        "p95": 101.64,
+        "min": 2.17,
+        "max": 101.64,
         "count": 10
       },
       "pii": {
-        "median": 0.06,
-        "p95": 1.34,
-        "min": 0.03,
-        "max": 1.34,
+        "median": 0.05,
+        "p95": 1.05,
+        "min": 0.04,
+        "max": 1.05,
         "count": 10
       },
       "redact": {
-        "median": 0.04,
-        "p95": 0.28,
-        "min": 0.03,
-        "max": 0.28,
+        "median": 0.06,
+        "p95": 0.29,
+        "min": 0.05,
+        "max": 0.29,
         "count": 10
       },
       "gate": {
@@ -84,10 +84,10 @@
         "count": 10
       },
       "total": {
-        "median": 1.5,
-        "p95": 85.93,
-        "min": 1.27,
-        "max": 85.93,
+        "median": 2.56,
+        "p95": 102.99,
+        "min": 2.26,
+        "max": 102.99,
         "count": 10
       }
     }
@@ -103,36 +103,36 @@
         "f1": 0
       },
       "EMAIL": {
-        "tp": 0,
+        "tp": 2,
         "fp": 0,
-        "fn": 2,
-        "precision": 0,
-        "recall": 0,
-        "f1": 0
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       },
       "PHONE": {
-        "tp": 0,
+        "tp": 1,
         "fp": 0,
-        "fn": 1,
-        "precision": 0,
-        "recall": 0,
-        "f1": 0
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       },
       "_aggregate": {
-        "tp": 0,
+        "tp": 3,
         "fp": 0,
-        "fn": 5,
-        "precision": 0,
-        "recall": 0,
-        "f1": 0
+        "fn": 2,
+        "precision": 1,
+        "recall": 0.6,
+        "f1": 0.75
       }
     },
     "redaction": {
-      "covered": 0,
-      "underRedacted": 5,
+      "covered": 5,
+      "underRedacted": 0,
       "overRedacted": 0,
-      "coverage": 0,
-      "avgIoU": 0
+      "coverage": 1,
+      "avgIoU": 1
     },
     "context": {
       "score": 10,
@@ -141,24 +141,24 @@
     },
     "timing": {
       "dom": {
-        "median": 0.68,
-        "p95": 11.58,
-        "min": 0.57,
-        "max": 11.58,
+        "median": 2.45,
+        "p95": 44.88,
+        "min": 1.93,
+        "max": 44.88,
         "count": 10
       },
       "pii": {
-        "median": 0.01,
-        "p95": 0.03,
-        "min": 0.01,
-        "max": 0.03,
+        "median": 0.04,
+        "p95": 0.34,
+        "min": 0.03,
+        "max": 0.34,
         "count": 10
       },
       "redact": {
-        "median": 0.01,
-        "p95": 0.03,
-        "min": 0.01,
-        "max": 0.03,
+        "median": 0.05,
+        "p95": 0.11,
+        "min": 0.03,
+        "max": 0.11,
         "count": 10
       },
       "gate": {
@@ -169,10 +169,10 @@
         "count": 10
       },
       "total": {
-        "median": 0.7,
-        "p95": 11.65,
-        "min": 0.6,
-        "max": 11.65,
+        "median": 2.53,
+        "p95": 45.34,
+        "min": 2,
+        "max": 45.34,
         "count": 10
       }
     }
@@ -196,12 +196,12 @@
         "f1": 1
       },
       "PHONE": {
-        "tp": 0,
+        "tp": 1,
         "fp": 0,
-        "fn": 1,
-        "precision": 0,
-        "recall": 0,
-        "f1": 0
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       },
       "CREDIT_CARD": {
         "tp": 1,
@@ -212,46 +212,46 @@
         "f1": 0.6667
       },
       "_aggregate": {
-        "tp": 3,
+        "tp": 4,
         "fp": 1,
-        "fn": 1,
-        "precision": 0.75,
-        "recall": 0.75,
-        "f1": 0.75
+        "fn": 0,
+        "precision": 0.8,
+        "recall": 1,
+        "f1": 0.8889
       }
     },
     "redaction": {
-      "covered": 3,
-      "underRedacted": 1,
+      "covered": 4,
+      "underRedacted": 0,
       "overRedacted": 1,
-      "coverage": 0.75,
-      "avgIoU": 0.75
+      "coverage": 1,
+      "avgIoU": 1
     },
     "context": {
-      "score": 5,
+      "score": 10,
       "total": 10,
-      "preservation": 0.5
+      "preservation": 1
     },
     "timing": {
       "dom": {
-        "median": 1.5,
-        "p95": 12.11,
-        "min": 0.9,
-        "max": 12.11,
+        "median": 3.32,
+        "p95": 27.58,
+        "min": 2.71,
+        "max": 27.58,
         "count": 10
       },
       "pii": {
-        "median": 0.03,
-        "p95": 0.33,
-        "min": 0.02,
-        "max": 0.33,
+        "median": 0.04,
+        "p95": 0.24,
+        "min": 0.04,
+        "max": 0.24,
         "count": 10
       },
       "redact": {
-        "median": 0.04,
-        "p95": 0.07,
-        "min": 0.02,
-        "max": 0.07,
+        "median": 0.07,
+        "p95": 0.09,
+        "min": 0.06,
+        "max": 0.09,
         "count": 10
       },
       "gate": {
@@ -262,10 +262,10 @@
         "count": 10
       },
       "total": {
-        "median": 1.57,
-        "p95": 12.51,
-        "min": 0.94,
-        "max": 12.51,
+        "median": 3.45,
+        "p95": 27.94,
+        "min": 2.81,
+        "max": 27.94,
         "count": 10
       }
     }
@@ -274,11 +274,11 @@
     "pii": {
       "PERSON": {
         "tp": 1,
-        "fp": 1,
+        "fp": 0,
         "fn": 0,
-        "precision": 0.5,
+        "precision": 1,
         "recall": 1,
-        "f1": 0.6667
+        "f1": 1
       },
       "EMAIL": {
         "tp": 1,
@@ -289,12 +289,12 @@
         "f1": 1
       },
       "PHONE": {
-        "tp": 0,
+        "tp": 1,
         "fp": 0,
-        "fn": 1,
-        "precision": 0,
-        "recall": 0,
-        "f1": 0
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       },
       "CREDIT_CARD": {
         "tp": 1,
@@ -305,46 +305,46 @@
         "f1": 1
       },
       "_aggregate": {
-        "tp": 3,
-        "fp": 1,
-        "fn": 1,
-        "precision": 0.75,
-        "recall": 0.75,
-        "f1": 0.75
+        "tp": 4,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "f1": 1
       }
     },
     "redaction": {
-      "covered": 3,
-      "underRedacted": 1,
-      "overRedacted": 1,
-      "coverage": 0.75,
-      "avgIoU": 0.75
+      "covered": 4,
+      "underRedacted": 0,
+      "overRedacted": 0,
+      "coverage": 1,
+      "avgIoU": 1
     },
     "context": {
-      "score": 5,
+      "score": 8,
       "total": 8,
-      "preservation": 0.625
+      "preservation": 1
     },
     "timing": {
       "dom": {
-        "median": 1.42,
-        "p95": 9.96,
-        "min": 0.76,
-        "max": 9.96,
+        "median": 2.35,
+        "p95": 19.18,
+        "min": 1.44,
+        "max": 19.18,
         "count": 10
       },
       "pii": {
-        "median": 0.03,
+        "median": 0.05,
         "p95": 0.06,
-        "min": 0.02,
+        "min": 0.03,
         "max": 0.06,
         "count": 10
       },
       "redact": {
-        "median": 0.04,
-        "p95": 0.07,
-        "min": 0.03,
-        "max": 0.07,
+        "median": 0.08,
+        "p95": 0.12,
+        "min": 0.05,
+        "max": 0.12,
         "count": 10
       },
       "gate": {
@@ -355,10 +355,10 @@
         "count": 10
       },
       "total": {
-        "median": 1.54,
-        "p95": 10.08,
-        "min": 0.81,
-        "max": 10.08,
+        "median": 2.47,
+        "p95": 19.36,
+        "min": 1.54,
+        "max": 19.36,
         "count": 10
       }
     }

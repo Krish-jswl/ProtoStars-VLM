@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>OCR Trigger Test</title></head>
+<body>
+    <h1>Canvas Content</h1>
+    <canvas id="myCanvas" width="500" height="300"></canvas>
+    <script>
+        const ctx = document.getElementById('myCanvas').getContext('2d');
+        ctx.font = '30px Arial';
+        ctx.fillText('This text is drawn on canvas.', 10, 50);
+        ctx.fillText('It should trigger OCR.', 10, 100);
+        ctx.fillText('Email: canvas@example.com', 10, 150);
+    </script>
+</body></html>

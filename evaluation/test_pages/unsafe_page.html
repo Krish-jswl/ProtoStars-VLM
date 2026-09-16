@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Unsafe Page</title></head>
+<body>
+    <div id="unsupported-pii-type">
+        <!-- We simulate a PII type that fails the privacy gate or causes incomplete redaction -->
+        <input type="text" value="Super secret unhandled string" />
+    </div>
+</body></html>
