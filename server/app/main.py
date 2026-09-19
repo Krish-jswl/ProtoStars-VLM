@@ -16,6 +16,9 @@ logger.setLevel(logging.INFO)
 # Setup provider
 if settings.vlm_provider == "mock":
     provider = MockVLMProvider()
+elif settings.vlm_provider == "openai":
+    from app.providers.openai_vlm import OpenAIVLMProvider
+    provider = OpenAIVLMProvider()
 else:
     raise RuntimeError(f"Unknown provider: {settings.vlm_provider}")
 

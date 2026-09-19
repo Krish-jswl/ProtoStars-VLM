@@ -91,11 +91,25 @@ export class AgentLoop {
             timing.total = performance.now() - t0;
             logger.info('Cycle complete', { traceId, cycle: this.cycleCount, timing, actionsExecuted });
 
+            // Broadcast to popup
+            try {
+                chrome.runtime.sendMessage({
+                    type: 'AGENT_UPDATE',
+                    cycle: this.cycleCount,
+                    timing,
+                    actionsExecuted,
+                    actions,
+                    screenshot: observed.sanitizedContext?.image || null,
+                    detections: observed.sanitizedContext?.dom?.filter(el => el.text?.startsWith('[')) || []
+                });
+            } catch(e) { /* popup may be closed */ }
+
             // 4. OBSERVE AGAIN if actions executed
             if (actionsExecuted > 0) {
                 setTimeout(() => this._cycle(), 500);
             } else {
                 this.running = false;
+                try { chrome.runtime.sendMessage({ type: 'AGENT_UPDATE', status: 'done', cycle: this.cycleCount }); } catch(e) {}
             }
 
         } catch (e) {

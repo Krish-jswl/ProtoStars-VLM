@@ -23,7 +23,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === 'START_AGENT') {
         const tabId = sender.tab?.id || request.tabId;
         if (!tabId) { sendResponse({ error: 'No tab ID' }); return; }
-        if (!loops.has(tabId)) {
+        const existing = loops.get(tabId);
+        if (!existing || !existing.running) {
             const loop = new AgentLoop(tabId);
             loops.set(tabId, loop);
             loop.start();

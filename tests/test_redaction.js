@@ -40,7 +40,7 @@ class MockCanvas {
     }
 }
 global.document.createElement = (tag) => {
-    if (tag === 'canvas') return new MockCanvas(1000, 1000);
+    if (tag === 'canvas') return createMockCanvas(1000, 1000);
     return dom.window.document.createElement(tag);
 };
 
@@ -75,7 +75,7 @@ describe('Redaction & Privacy Gate Tests', () => {
     });
 
     test('Visual Redaction covers image', async () => {
-        const rawCanvas = new MockCanvas(100, 100);
+        const rawCanvas = createMockCanvas(100, 100);
         const plan = redactor.planRedaction([
             { type: 'PHONE', bbox: {x:10,y:10,width:20,height:20}, confidence: 0.9 }
         ]);
@@ -89,7 +89,7 @@ describe('Redaction & Privacy Gate Tests', () => {
     });
 
     test('Privacy Gate allows fully redacted context', async () => {
-        const rawCanvas = new MockCanvas(100, 100);
+        const rawCanvas = createMockCanvas(100, 100);
         const plan = redactor.planRedaction([
             { type: 'EMAIL', bbox: {x:10,y:10,width:20,height:20}, confidence: 0.9 }
         ]);
@@ -106,13 +106,13 @@ describe('Redaction & Privacy Gate Tests', () => {
     });
 
     test('Privacy Gate blocks on incomplete visual redaction', async () => {
-        const rawCanvas = new MockCanvas(100, 100);
+        const rawCanvas = createMockCanvas(100, 100);
         const plan = redactor.planRedaction([
             { type: 'EMAIL', bbox: {x:10,y:10,width:20,height:20}, confidence: 0.9 }
         ]);
         
         // Mock a failure by passing a non-redacted canvas
-        const sanContext = { dom: [], image: new MockCanvas(100, 100) };
+        const sanContext = { dom: [], image: createMockCanvas(100, 100) };
         const res = gate.verify({ dom: [], scaleX:1, scaleY:1 }, sanContext, plan);
         
         assert.strictEqual(res.allowed, false);
@@ -123,14 +123,14 @@ describe('Redaction & Privacy Gate Tests', () => {
         const plan = redactor.planRedaction([
             { type: 'WEIRD_TYPE', bbox: {x:10,y:10,width:20,height:20}, confidence: 0.9 }
         ]);
-        const res = gate.verify({ dom: [], scaleX:1, scaleY:1 }, { dom: [], image: new MockCanvas(100, 100) }, plan);
+        const res = gate.verify({ dom: [], scaleX:1, scaleY:1 }, { dom: [], image: createMockCanvas(100, 100) }, plan);
         
         assert.strictEqual(res.allowed, false);
         assert.ok(res.violations[0].includes("Unknown/unhandled sensitive detection"));
     });
 
     test('Coordinate resizing is handled', async () => {
-        const rawCanvas = new MockCanvas(200, 200); // 2x scaled image
+        const rawCanvas = createMockCanvas(200, 200); // 2x scaled image
         const plan = redactor.planRedaction([
             { type: 'CREDIT_CARD', bbox: {x:10,y:10,width:20,height:20}, confidence: 0.9 }
         ]);
@@ -147,7 +147,17 @@ describe('Redaction & Privacy Gate Tests', () => {
 
 function rawContext(canvas) { return canvas; }
 function checkPixel(canvas, x, y) {
-    const data = canvas.getContext('2d').getImageData().data;
+    const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
     const idx = (y * canvas.width + x) * 4;
     return data[idx] === 0 && data[idx+1] === 0 && data[idx+2] === 0;
+}
+
+function createMockCanvas(w, h) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, w, h);
+    return c;
 }

@@ -34,3 +34,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     return true;
 });
+
+// Listen for test triggers from the webpage environment (used by Playwright)
+window.addEventListener('message', (event) => {
+    if (event.source !== window || !event.data) return;
+    if (event.data.type === 'AGENT_TEST_TRIGGER') {
+        chrome.runtime.sendMessage({ type: 'START_AGENT' });
+    }
+});

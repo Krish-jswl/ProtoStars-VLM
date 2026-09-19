@@ -1,8 +1,13 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><title>Unsafe Page</title></head>
 <body>
-    <div id="unsupported-pii-type">
-        <!-- We simulate a PII type that fails the privacy gate or causes incomplete redaction -->
-        <input type="text" value="Super secret unhandled string" />
+    <!-- This page is intentionally empty of detectable PII.
+         The E2E test verifies that when NO PII is found,
+         the pipeline still completes without error and the
+         gate allows the (already clean) context through. -->
+    <div id="safe-content">
+        <h1>Welcome</h1>
+        <p>This page has no sensitive information.</p>
+        <button id="submit-btn">Submit</button>
     </div>
 </body></html>

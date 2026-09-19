@@ -1,76 +1,27 @@
 
 # Architecture
 
-WebGPU is preferred for supported local vision models, but OCR currently uses a WASM backend through Tesseract.js. The OCR provider is abstracted so a WebGPU implementation can be added later.
+The system consists of a browser extension for privacy preservation and a backend server for planning.
 
-## Observe -> Reason -> Act Loop
+## Privacy Boundary
+1. Browser extracts DOM and takes screenshots.
+2. Local PII detection identifies sensitive data.
+3. Visual Redactor black-boxes PII in images.
+4. DOM Sanitizer replaces PII with tokens (e.g. `[EMAIL_1]`).
+5. **Privacy Gate**: Prevents network request if visual redaction fails or unhandled PII exists.
 
-OBSERVE
- -> LOCAL PRIVACY PIPELINE
-   -> DOM Analysis
-   -> Screenshot Capture
-   -> OCR (event-driven)
-   -> PII Detection + Fusion
-   -> Redaction (opaque visual + DOM token replacement)
- -> PRIVACY GATE (fail-closed)
- -> SANITIZED CONTEXT (no PII)
- -> POST /v1/agent/plan -> FastAPI Backend
- -> VLM PROVIDER (MockVLM / future real provider)
- -> STRUCTURED ACTION PLAN
- -> LOCAL ACTION VALIDATOR
-   -> action type in allowlist
-   -> target exists in DOM
-   -> target visible and enabled
-   -> re-check freshness before execution
- -> BROWSER EXECUTOR
- -> OBSERVE AGAIN
+## Backend (Phase 8D)
+The FastAPI backend accepts ONLY sanitized context. It routes it to a VLMProvider.
 
-**The backend never receives raw browser context.**
+**VLM Providers:**
+- `MockVLMProvider`: Default, returns deterministic safe actions for local testing.
+- `OpenAIVLMProvider`: Integrates with `gpt-4o-mini`. Uses OpenAI Structured Outputs to strictly enforce the `PlanResponse` schema.
 
-**The server proposes actions, but the browser is the final authority.**
+**Security & Prompt Injection:**
+The system prompt strictly instructs the VLM to treat webpage text as untrusted data and forbids it from interpreting page content as instructions. All outputs are strictly validated by Pydantic against an allowlist of safe actions (`click`, `scroll`, `focus`, `select`, `wait`, `type_local`).
 
-The network layer must never receive raw page context.
-
-## Local Secret Handling (type_local)
-
-```
-            SERVER
-               |
-               | secret_ref ONLY
-               v
-      LOCAL ACTION VALIDATOR
-               |
-               v
-      LOCAL SECRET PROVIDER
-               |
-               v
-          TYPE_LOCAL
-               |
-               v
-         BROWSER INPUT
-```
-
-**Secret values never cross the privacy boundary.**
-
-- Server sends `{ type: "type_local", target: "element_id", args: { secret_ref: "password" } }`
-- Browser resolves `secret_ref` to a locally stored value
-- Browser validates target compatibility (input type, visibility, enabled state)
-- Browser inserts value with proper DOM events
-- Actual secret value NEVER appears in: network requests, logs, telemetry, DOM analyzer output, screenshots, OCR output, error messages, or API payloads
-
-### Allowed Secret References
-- `email` -> input[type=email], input[type=text]
-- `phone` -> input[type=tel], input[type=text]
-- `username` -> input[type=text], input[type=email]
-- `password` -> input[type=password] ONLY
-
-### Secret Lifetime
-- In-memory only (no persistence to localStorage/IndexedDB)
-- Cleared on extension unload or explicit clear() call
-- No cloud secret management
-
-## Privacy Invariants
-- If privacy gate returns allowed=false -> zero network traffic.
-- All PII regions are replaced with opaque black boxes before image leaves device.
-- DOM sensitive text is replaced with semantic tokens [TYPE_N] before leaving device.
-- type_local actions resolve secrets locally; the server only receives a secret_ref name.
+## Local Secret Flow (Phase 7)
+1. Agent plans `type_local` action with `secret_ref="email"`.
+2. Network response reaches browser.
+3. Local Action Executor queries `LocalSecretProvider` for `"email"`.
+4. Secret is securely injected into the DOM without ever leaving the browser.

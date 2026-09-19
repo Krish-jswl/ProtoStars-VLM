@@ -1,17 +1,110 @@
-
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>Privacy Vision Agent</title>
-    <style>
-        body { width: 300px; font-family: sans-serif; padding: 10px; }
-        .btn { padding: 8px 12px; cursor: pointer; }
-    </style>
+    <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <h3>Privacy Agent</h3>
-    <button id="scanBtn" class="btn">Scan Page</button>
-    <div id="status"></div>
-    <script type="module" src="popup.js"></script>
+    <div class="header">
+        <div class="header-top">
+            <div class="logo">🛡️</div>
+            <h1>Privacy Vision Agent</h1>
+        </div>
+        <p class="tagline">Your PII never leaves your browser</p>
+    </div>
+
+    <div class="controls">
+        <button id="runBtn" class="btn btn-primary">
+            <span class="btn-icon">▶</span> Run Agent
+        </button>
+        <button id="stopBtn" class="btn btn-danger" style="display:none;">
+            <span class="btn-icon">■</span> Stop Agent
+        </button>
+        <button id="scanBtn" class="btn btn-secondary">
+            <span class="btn-icon">🔍</span> Scan Only
+        </button>
+    </div>
+
+    <div id="status-bar" class="status-bar">
+        <span id="status-dot" class="dot dot-idle"></span>
+        <span id="status-text">Idle</span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="detections">Detections</button>
+        <button class="tab" data-tab="screenshot">Screenshot</button>
+        <button class="tab" data-tab="actions">Actions</button>
+        <button class="tab" data-tab="logs">Logs</button>
+    </div>
+
+    <!-- Overview Tab -->
+    <div class="tab-content active" id="tab-overview">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-elements">—</div>
+                <div class="stat-label">Elements</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-pii">—</div>
+                <div class="stat-label">PII Found</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-redacted">—</div>
+                <div class="stat-label">Redacted</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-actions">—</div>
+                <div class="stat-label">Actions</div>
+            </div>
+        </div>
+        <div class="timing-section">
+            <h3>⏱ Pipeline Timing</h3>
+            <div id="timing-bars"></div>
+        </div>
+        <div class="cycle-section">
+            <h3>🔄 Cycles</h3>
+            <div id="cycle-count" class="cycle-count">0</div>
+        </div>
+    </div>
+
+    <!-- Detections Tab -->
+    <div class="tab-content" id="tab-detections">
+        <div id="detections-list" class="card-list">
+            <div class="empty-state">Run the agent to see PII detections</div>
+        </div>
+    </div>
+
+    <!-- Screenshot Tab -->
+    <div class="tab-content" id="tab-screenshot">
+        <div class="screenshot-container">
+            <div class="screenshot-label">Redacted Screenshot (sent to VLM)</div>
+            <img id="redacted-img" class="screenshot-img" />
+            <div id="screenshot-empty" class="empty-state">Run the agent to capture</div>
+        </div>
+    </div>
+
+    <!-- Actions Tab -->
+    <div class="tab-content" id="tab-actions">
+        <div id="actions-list" class="card-list">
+            <div class="empty-state">Run the agent to see planned actions</div>
+        </div>
+    </div>
+
+    <!-- Logs Tab -->
+    <div class="tab-content" id="tab-logs">
+        <div id="logs-container" class="logs-container">
+            <div class="empty-state">Waiting for events...</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>v0.1.0</span>
+        <a href="#" id="clearBtn">Clear Data</a>
+    </div>
+
+    <script src="popup.js"></script>
 </body>
 </html>

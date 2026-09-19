@@ -61,16 +61,20 @@ export class PrivacyPipelineRunner {
         const plan = this.redactor.planRedaction(fusedDetections);
         timing.plan = performance.now() - t;
 
+        // Calculate scaling factors between DOM (CSS pixels) and the captured image (physical/preprocessed pixels)
+        const scaleX = processedCanvas.width / window.innerWidth;
+        const scaleY = processedCanvas.height / window.innerHeight;
+
         // 7. Visual Redaction
         t = performance.now();
-        const redactedCanvas = await this.redactor.redactImage(processedCanvas, plan);
+        const redactedCanvas = await this.redactor.redactImage(processedCanvas, plan, scaleX, scaleY);
         timing.redact = performance.now() - t;
 
         // 8. DOM Sanitization
         const sanitizedDom = this.redactor.sanitizeDOM(domElements, plan);
 
         // 9. Build raw context for gate verification
-        const rawContext = { dom: domElements, scaleX: 1, scaleY: 1 };
+        const rawContext = { dom: domElements, scaleX, scaleY };
         const sanitizedContext = { dom: sanitizedDom, image: redactedCanvas };
 
         // 10. Privacy Gate

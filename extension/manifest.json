@@ -22,8 +22,7 @@
         "<all_urls>"
       ],
       "js": [
-        "lib/tesseract/tesseract.min.js",
-        "content/content_main.js"
+        "content/content_bundle.js"
       ],
       "run_at": "document_idle",
       "all_frames": false

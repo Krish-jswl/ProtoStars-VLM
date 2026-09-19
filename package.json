@@ -16,5 +16,9 @@
   "dependencies": {
     "jsdom": "^30.0.1",
     "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.28.2"
   }
 }
