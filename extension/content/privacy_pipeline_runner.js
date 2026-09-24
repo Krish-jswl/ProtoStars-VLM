@@ -1,6 +1,7 @@
 
 import { DOMAnalyzer } from './dom_analyzer.js';
 import { ActionExecutor } from './action_executor.js';
+import { FaceDetectorService } from "../privacy/face_detector.js";
 import { PIIDetector } from '../privacy/pii_detector.js';
 import { PIIFusion } from '../privacy/pii_fusion.js';
 import { Redactor } from '../privacy/redactor.js';
@@ -15,11 +16,13 @@ export class PrivacyPipelineRunner {
     constructor() {
         this.analyzer = new DOMAnalyzer();
         this.executor = new ActionExecutor(Config);
+        this.faceDetector = new FaceDetectorService();
         this.detector = new PIIDetector();
         this.fusion = new PIIFusion();
         this.redactor = new Redactor();
         this.gate = new PrivacyGate();
         this.secretProvider = new LocalSecretProvider();
+        this._secretsLoaded = false;
     }
 
     async run() {
@@ -35,8 +38,15 @@ export class PrivacyPipelineRunner {
         t = performance.now();
         const dataUri = await new Promise((resolve, reject) => {
             chrome.runtime.sendMessage({ type: 'CAPTURE_TAB' }, (res) => {
-                if (res?.dataUri) resolve(res.dataUri);
-                else reject(new Error('Capture failed'));
+                if (chrome.runtime.lastError) {
+                    reject(new Error('Capture failed: ' + chrome.runtime.lastError.message));
+                } else if (res?.dataUri) {
+                    resolve(res.dataUri);
+                } else if (res?.error) {
+                    reject(new Error('Capture failed: ' + res.error));
+                } else {
+                    reject(new Error('Capture failed: no dataUri returned'));
+                }
             });
         });
         timing.screenshot = performance.now() - t;
@@ -50,9 +60,19 @@ export class PrivacyPipelineRunner {
         const ocrResults = [];
         timing.ocr = 0;
 
+        // Calculate scaling factors between DOM (CSS pixels) and the captured image (physical/preprocessed pixels)
+        const scaleX = processedCanvas.width / window.innerWidth;
+        const scaleY = processedCanvas.height / window.innerHeight;
+
+        // 4.5. Face Detection
+        t = performance.now();
+        const faceDetections = await this.faceDetector.detectFaces(processedCanvas, scaleX, scaleY);
+        timing.face = performance.now() - t;
+
         // 5. PII Detection + Fusion
         t = performance.now();
         const rawDetections = this.detector.detectAll(domElements, ocrResults);
+        rawDetections.push(...faceDetections);
         const fusedDetections = this.fusion.fuse(rawDetections);
         timing.pii = performance.now() - t;
 
@@ -61,9 +81,7 @@ export class PrivacyPipelineRunner {
         const plan = this.redactor.planRedaction(fusedDetections);
         timing.plan = performance.now() - t;
 
-        // Calculate scaling factors between DOM (CSS pixels) and the captured image (physical/preprocessed pixels)
-        const scaleX = processedCanvas.width / window.innerWidth;
-        const scaleY = processedCanvas.height / window.innerHeight;
+
 
         // 7. Visual Redaction
         t = performance.now();
@@ -109,8 +127,8 @@ export class PrivacyPipelineRunner {
             image: redactedCanvas.toDataURL('image/jpeg', 0.8)
         };
 
-        logger.info('Privacy pipeline passed', { timing });
-        return { allowed: true, sanitizedContext: sanitizedPayload, timing };
+        logger.info('Privacy pipeline passed', { timing, detections: plan.length });
+        return { allowed: true, sanitizedContext: sanitizedPayload, timing, redactionPlan: plan };
     }
 
     async executeValidatedAction(action) {
@@ -126,16 +144,94 @@ export class PrivacyPipelineRunner {
         }
 
         if (action.type === 'type_local') {
+            await this._ensureSecretsLoaded();
+            // Non-secret text typing (e.g. note title) uses args.text
+            if (!action.args?.secret_ref && typeof action.args?.text === 'string') {
+                return this._executeTypeText(action);
+            }
             return this._executeTypeLocal(action);
         }
 
-        const selector = action.target ? `#${action.target}` : null;
+        const selector = ActionExecutor.selectorForTarget(action.target);
+        if (!selector && action.type !== 'scroll') {
+            return { success: false, error: 'No target specified' };
+        }
+        return this.executor.execute(action.type, selector || 'body', action.args || {});
+    }
+
+    /** Normalize backend secret_ref values (password / PASSWORD_1 / [PASSWORD_1]). */
+    _normalizeSecretRef(ref) {
+        if (!ref || typeof ref !== 'string') return null;
+        const cleaned = ref.trim().replace(/^\[|\]$/g, '');
+        const lower = cleaned.toLowerCase();
+        const base = lower.replace(/_\d+$/, '');
+        if (['email', 'phone', 'username', 'password'].includes(base)) return base;
+        return lower;
+    }
+
+    async _ensureSecretsLoaded() {
+        if (this._secretsLoaded) return;
+        this._secretsLoaded = true;
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+                const data = await chrome.storage.local.get(['pva_secrets']);
+                const secrets = data.pva_secrets || {};
+                for (const [key, value] of Object.entries(secrets)) {
+                    if (typeof value === 'string' && value.length > 0) {
+                        try { this.secretProvider.set(key, value); } catch (_) { /* unknown ref */ }
+                    }
+                }
+            }
+        } catch (_) { /* storage unavailable */ }
+    }
+
+    /** Apply secrets from a SET_SECRETS message (in-memory + optional persist). */
+    setSecrets(secrets, persist = true) {
+        if (!secrets || typeof secrets !== 'object') return;
+        for (const [key, value] of Object.entries(secrets)) {
+            if (typeof value === 'string' && value.length > 0) {
+                try { this.secretProvider.set(key, value); } catch (_) { /* unknown ref */ }
+            }
+        }
+        this._secretsLoaded = true;
+        if (persist && typeof chrome !== 'undefined' && chrome.storage?.local) {
+            chrome.storage.local.get(['pva_secrets'], (data) => {
+                const merged = { ...(data.pva_secrets || {}), ...secrets };
+                chrome.storage.local.set({ pva_secrets: merged });
+            });
+        }
+    }
+
+    _executeTypeText(action) {
+        const selector = ActionExecutor.selectorForTarget(action.target);
         if (!selector) return { success: false, error: 'No target specified' };
-        return this.executor.execute(action.type, selector, action.args || {});
+
+        let element;
+        try {
+            element = document.querySelector(selector);
+        } catch (e) {
+            return { success: false, error: 'Invalid selector' };
+        }
+
+        if (!element) return { success: false, error: 'Element not found' };
+        const tag = element.tagName?.toLowerCase();
+        if (tag !== 'input' && tag !== 'textarea') {
+            return { success: false, error: 'Target must be input or textarea' };
+        }
+        if (element.disabled || element.readOnly) {
+            return { success: false, error: 'Target is not editable' };
+        }
+        // Never allow plaintext typing into password fields — must use secret_ref
+        if ((element.type || '').toLowerCase() === 'password') {
+            return { success: false, error: 'Use secret_ref for password fields' };
+        }
+
+        LocalSecretProvider.insertSecret(element, String(action.args.text));
+        return { success: true };
     }
 
     _executeTypeLocal(action) {
-        const secretRef = action.args?.secret_ref;
+        const secretRef = this._normalizeSecretRef(action.args?.secret_ref);
         if (!secretRef) {
             return { success: false, error: 'Missing secret_ref' };
         }
@@ -145,7 +241,7 @@ export class PrivacyPipelineRunner {
             return { success: false, error: 'Secret not available' };
         }
 
-        const selector = action.target ? `#${action.target}` : null;
+        const selector = ActionExecutor.selectorForTarget(action.target);
         if (!selector) return { success: false, error: 'No target specified' };
 
         let element;

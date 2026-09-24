@@ -14,12 +14,21 @@ let state = {
 };
 
 // DOM refs
-const runBtn = document.getElementById('runBtn');
+const goBtn = document.getElementById('goBtn');
 const stopBtn = document.getElementById('stopBtn');
-const scanBtn = document.getElementById('scanBtn');
 const statusDot = document.getElementById('status-dot');
 const statusText = document.getElementById('status-text');
 const clearBtn = document.getElementById('clearBtn');
+const goalInput = document.getElementById('goalInput');
+const secretEmail = document.getElementById('secretEmail');
+const secretPassword = document.getElementById('secretPassword');
+
+// Restore locally-stored credential refs (values stay in chrome.storage, never logged)
+chrome.storage.local.get(['pva_secrets'], (data) => {
+    const s = data.pva_secrets || {};
+    if (secretEmail && s.email) secretEmail.value = s.email;
+    if (secretPassword && s.password) secretPassword.value = s.password;
+});
 
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
@@ -135,118 +144,114 @@ function renderAll() {
     renderLogs();
 }
 
-// Scan button
-scanBtn.addEventListener('click', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
-    addLog('Scanning page...');
-    chrome.tabs.sendMessage(tab.id, { type: 'ANALYZE_DOM' }, (response) => {
-        if (response) {
-            state.elements = response.elements.length;
-            addLog(`Found ${response.elements.length} elements`);
-        } else {
-            addLog('Scan failed - content script not loaded', 'error');
-        }
-        renderAll();
+// ── Helper: ensure content script is loaded ──────────────────────────────────
+async function ensureContentScript(tabId) {
+    return new Promise((resolve) => {
+        chrome.tabs.sendMessage(tabId, { type: 'ANALYZE_DOM' }, (response) => {
+            if (chrome.runtime.lastError || !response) {
+                resolve(false);
+            } else {
+                state.elements = response.elements?.length || 0;
+                resolve(true);
+            }
+        });
     });
-});
+}
 
-// Run agent
-runBtn.addEventListener('click', async () => {
+// ── Go button ─────────────────────────────────────────────────────────────────
+goBtn.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) return;
 
-    addLog('Starting agent...');
+    const goal = goalInput ? goalInput.value.trim() : '';
+
+    // Persist local secrets for type_local (never sent to backend)
+    const secrets = {};
+    if (secretEmail?.value) secrets.email = secretEmail.value;
+    if (secretPassword?.value) secrets.password = secretPassword.value;
+    if (Object.keys(secrets).length) {
+        await chrome.storage.local.set({ pva_secrets: secrets });
+    }
+
+    addLog('Starting agent' + (goal ? ` with goal: "${goal}"` : '') + '...');
     setStatus('Starting...', 'running');
 
-    // First check if content script is loaded by sending a ping
-    try {
-        const pingResult = await new Promise((resolve) => {
-            chrome.tabs.sendMessage(tab.id, { type: 'ANALYZE_DOM' }, (response) => {
-                if (chrome.runtime.lastError) {
-                    resolve(null);
-                } else {
-                    resolve(response);
-                }
-            });
-        });
-
-        if (!pingResult) {
-            addLog('Content script not loaded! Injecting now...', 'warn');
-            // Programmatically inject the content script
+    // 1. Ensure content script is present, inject if missing
+    const isLoaded = await ensureContentScript(tab.id);
+    if (!isLoaded) {
+        addLog('Content script not loaded — injecting...', 'warn');
+        try {
             await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 files: ['content/content_bundle.js']
             });
-            addLog('Content script injected. Waiting...', 'info');
-            await new Promise(r => setTimeout(r, 500));
-        } else {
-            state.elements = pingResult.elements?.length || 0;
-            addLog('Content script active. Found ' + state.elements + ' elements');
+            addLog('Content script injected. Waiting for init...', 'info');
+            await new Promise(r => setTimeout(r, 600));
+
+            // Verify injection worked
+            const verified = await ensureContentScript(tab.id);
+            if (!verified) {
+                addLog('Content script injection failed — cannot run on this page.', 'error');
+                setStatus('Error', 'error');
+                renderAll();
+                return;
+            }
+        } catch (e) {
+            addLog('Injection error: ' + e.message, 'error');
+            setStatus('Error', 'error');
+            renderAll();
+            return;
         }
-    } catch (e) {
-        addLog('Injection failed: ' + e.message, 'error');
-        setStatus('Error', 'error');
-        renderAll();
-        return;
+    } else {
+        addLog('Content script active. Found ' + state.elements + ' elements.');
     }
 
-    // Run privacy pipeline in the content script
-    chrome.tabs.sendMessage(tab.id, { type: 'PRIVACY_PIPELINE' }, (pipelineResult) => {
-        if (chrome.runtime.lastError) {
-            addLog('Pipeline error: ' + chrome.runtime.lastError.message, 'error');
-            renderAll();
-            return;
-        }
-        if (pipelineResult) {
-            if (pipelineResult.timing) state.timing = pipelineResult.timing;
-            if (pipelineResult.sanitizedContext) {
-                state.elements = pipelineResult.sanitizedContext.dom?.length || 0;
-                state.screenshotDataUri = pipelineResult.sanitizedContext.image || null;
-                // Count PII tokens in the sanitized DOM
-                const piiItems = pipelineResult.sanitizedContext.dom?.filter(el => el.text && el.text.match(/^\[.+_\d+\]$/)) || [];
-                state.piiCount = piiItems.length;
-                state.redactedCount = piiItems.length;
-                state.detections = piiItems.map(el => ({ type: el.text.replace(/[\[\]_\d]/g, ''), token: el.text, bbox: el.bbox, confidence: 1.0 }));
-            }
-            if (pipelineResult.allowed) {
-                addLog('Privacy gate: PASSED ✅', 'info');
-            } else {
-                addLog('Privacy gate: BLOCKED 🚫 - ' + (pipelineResult.violations || []).join(', '), 'warn');
-            }
-        }
-        renderAll();
-    });
+    // Push secrets into the content-script LocalSecretProvider
+    if (Object.keys(secrets).length) {
+        await new Promise((resolve) => {
+            chrome.tabs.sendMessage(tab.id, { type: 'SET_SECRETS', secrets }, () => {
+                void chrome.runtime.lastError;
+                resolve();
+            });
+        });
+    }
 
-    // Start the agent loop in the service worker
-    chrome.runtime.sendMessage({ type: 'START_AGENT', tabId: tab.id }, (response) => {
-        if (chrome.runtime.lastError) {
-            addLog('Service worker error: ' + chrome.runtime.lastError.message, 'error');
-            setStatus('Error', 'error');
+    // 2. Start agent loop in service worker (passes goal — uses START_GOAL_AGENT)
+    //    The agent loop itself runs the privacy pipeline; we don't duplicate it here.
+    chrome.runtime.sendMessage(
+        { type: 'START_GOAL_AGENT', tabId: tab.id, goal },
+        (response) => {
+            if (chrome.runtime.lastError) {
+                addLog('Service worker error: ' + chrome.runtime.lastError.message, 'error');
+                setStatus('Error', 'error');
+                renderAll();
+                return;
+            }
+            if (response?.started) {
+                state.running = true;
+                goBtn.style.display = 'none';
+                stopBtn.style.display = 'flex';
+                setStatus('Running', 'running');
+                addLog('Agent loop started ✅');
+            } else if (response?.error) {
+                addLog('Failed to start: ' + response.error, 'error');
+                setStatus('Error', 'error');
+            } else {
+                addLog('Unexpected response: ' + JSON.stringify(response), 'warn');
+                setStatus('Error', 'error');
+            }
             renderAll();
-            return;
         }
-        if (response?.started) {
-            state.running = true;
-            runBtn.style.display = 'none';
-            stopBtn.style.display = 'flex';
-            setStatus('Running', 'running');
-            addLog('Agent loop started ✅');
-        } else {
-            addLog('Failed to start: ' + JSON.stringify(response), 'error');
-            setStatus('Error', 'error');
-        }
-        renderAll();
-    });
+    );
 });
 
-// Stop agent
+// ── Stop button ───────────────────────────────────────────────────────────────
 stopBtn.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) return;
     chrome.runtime.sendMessage({ type: 'STOP_AGENT', tabId: tab.id }, () => {
         state.running = false;
-        runBtn.style.display = 'flex';
+        goBtn.style.display = 'flex';
         stopBtn.style.display = 'none';
         setStatus('Stopped', 'idle');
         addLog('Agent stopped');
@@ -254,7 +259,7 @@ stopBtn.addEventListener('click', async () => {
     });
 });
 
-// Listen for messages from background (agent loop updates)
+// ── Listen for agent loop updates from background ─────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'AGENT_UPDATE') {
         if (msg.cycle) state.cycles = msg.cycle;
@@ -266,24 +271,34 @@ chrome.runtime.onMessage.addListener((msg) => {
             state.redactedCount = msg.detections.length;
         }
         if (msg.actions) {
-            state.actions = msg.actions;
+            state.actions = [...(state.actions), ...msg.actions].slice(-50);
         }
         if (msg.screenshot) {
             state.screenshotDataUri = msg.screenshot;
         }
         if (msg.status === 'done') {
             state.running = false;
-            runBtn.style.display = 'flex';
+            goBtn.style.display = 'flex';
             stopBtn.style.display = 'none';
             setStatus('Done', 'done');
-            addLog('Agent loop finished');
+            addLog('Agent loop finished ✅');
+        } else if (msg.status === 'error') {
+            state.running = false;
+            goBtn.style.display = 'flex';
+            stopBtn.style.display = 'none';
+            setStatus('Error', 'error');
+            addLog('Agent error: ' + (msg.error || 'unknown'), 'error');
+        } else if (msg.cycle) {
+            addLog(`Cycle ${msg.cycle} complete — ${msg.actionsExecuted || 0} action(s)`);
         }
-        addLog(`Cycle ${msg.cycle || '?'} complete — ${msg.actionsExecuted || 0} actions`);
+        if (msg.log) {
+            addLog(msg.log, msg.logLevel || 'info');
+        }
         renderAll();
     }
 });
 
-// Clear
+// ── Clear ─────────────────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', (e) => {
     e.preventDefault();
     state = { running: false, elements: 0, piiCount: 0, redactedCount: 0, actionCount: 0, cycles: 0, timing: {}, detections: [], actions: [], logs: [], screenshotDataUri: null };

@@ -42,12 +42,13 @@ class PageContext(BaseModel):
     viewport: Viewport
 
 class SanitizedContext(BaseModel):
+    goal: str = ""
     page: PageContext
     dom: List[DOMNode] = Field(..., max_length=5000, description="Max 5000 DOM nodes")
     image: str = Field(..., max_length=10000000, description="Base64 image, max ~10MB")
     
 class Action(BaseModel):
-    type: str = Field(..., pattern="^(click|scroll|focus|select|wait|type_local)$")
+    type: str = Field(..., pattern="^(click|scroll|focus|select|wait|type_local|done)$")
     target: str = ""
     args: Dict[str, Any] = Field(default_factory=dict)
 

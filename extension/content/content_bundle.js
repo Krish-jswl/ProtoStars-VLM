@@ -27,6 +27,12 @@
       return true;
     }
     analyzeElement(element) {
+      if (!element.id) {
+        if (!element.dataset?.pvaId) {
+          if (element.dataset) element.dataset.pvaId = "pva-" + Math.random().toString(36).substring(2, 8);
+        }
+        element.id = element.dataset?.pvaId || "pva-" + Math.random().toString(36).substring(2, 8);
+      }
       const rect = element.getBoundingClientRect();
       const tag = element.tagName.toLowerCase();
       let text = "";
@@ -109,12 +115,31 @@
       if (element.disabled) return { valid: false, reason: "Element disabled" };
       return { valid: true };
     }
+    /** Build a safe CSS selector from an element id (or pass through a full selector). */
+    static selectorForTarget(target) {
+      if (!target || typeof target !== "string") return null;
+      const trimmed = target.trim();
+      if (!trimmed) return null;
+      if (trimmed.startsWith("#") || trimmed.startsWith(".") || trimmed.startsWith("[") || trimmed.includes(" ") || trimmed.includes(">")) {
+        return trimmed;
+      }
+      const escape = typeof CSS !== "undefined" && CSS.escape ? CSS.escape : (s) => s.replace(/([ !"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, "\\$1");
+      return `#${escape(trimmed)}`;
+    }
     execute(actionType, targetSelector, args = {}) {
       if (!this.config.actionValidation.allowedActions.includes(actionType)) {
         return { success: false, error: `Action ${actionType} not allowed` };
       }
       let element;
       try {
+        if (actionType === "scroll" && (!targetSelector || /^(document|window|body|html)$/i.test(targetSelector.replace(/^#/, "")))) {
+          window.scrollBy({
+            top: args.y || 0,
+            left: args.x || 0,
+            behavior: "smooth"
+          });
+          return { success: true };
+        }
         element = document.querySelector(targetSelector);
       } catch (e) {
         return { success: false, error: `Invalid selector` };
@@ -138,6 +163,32 @@
               behavior: "smooth"
             });
             break;
+          case "select": {
+            const tag = element.tagName?.toLowerCase();
+            if (tag !== "select") {
+              return { success: false, error: "select action requires a <select> element" };
+            }
+            const wanted = args.value ?? args.text;
+            if (wanted == null || wanted === "") {
+              return { success: false, error: "select requires args.value or args.text" };
+            }
+            const wantedStr = String(wanted);
+            let matched = false;
+            for (const opt of element.options) {
+              if (opt.value === wantedStr || opt.text === wantedStr || opt.label === wantedStr) {
+                element.value = opt.value;
+                matched = true;
+                break;
+              }
+            }
+            if (!matched) {
+              return { success: false, error: "No matching option" };
+            }
+            const EventCtor = element.ownerDocument?.defaultView?.Event || Event;
+            element.dispatchEvent(new EventCtor("input", { bubbles: true }));
+            element.dispatchEvent(new EventCtor("change", { bubbles: true }));
+            break;
+          }
           default:
             return { success: false, error: `Unknown action` };
         }
@@ -148,6 +199,48 @@
     }
   };
 
+  // extension/privacy/face_detector.js
+  var FaceDetectorService = class {
+    constructor() {
+      this.nativeDetector = null;
+      if ("FaceDetector" in window) {
+        try {
+          this.nativeDetector = new window.FaceDetector();
+        } catch (e) {
+          console.warn("FaceDetector supported but failed to initialize", e);
+        }
+      }
+    }
+    async detectFaces(imageCanvas, scaleX = 1, scaleY = 1) {
+      const detections = [];
+      if (this.nativeDetector) {
+        try {
+          const faces = await this.nativeDetector.detect(imageCanvas);
+          for (const face of faces) {
+            const rect = face.boundingBox;
+            detections.push({
+              type: "FACE",
+              bbox: {
+                // Convert physical pixels back to CSS pixels for consistency
+                x: rect.x / scaleX,
+                y: rect.y / scaleY,
+                width: rect.width / scaleX,
+                height: rect.height / scaleY
+              },
+              confidence: 0.9,
+              sources: ["SHAPE_DETECTION"]
+            });
+          }
+        } catch (e) {
+          console.warn("Native face detection failed", e);
+        }
+      } else {
+        console.log("No native FaceDetector found. Needs face-api fallback.");
+      }
+      return detections;
+    }
+  };
+
   // extension/privacy/pii_detector.js
   var PIIDetector = class {
     constructor() {
@@ -155,10 +248,12 @@
         EMAIL: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
         PHONE: /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4,10}/g,
         CREDIT_CARD: /\b(?:\d[ -]*?){13,19}\b/g,
-        AUTH_TOKEN: /\b(?:ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_.-]*|ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{20,})\b/g
+        AUTH_TOKEN: /\b(?:ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_.-]*|ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{20,})\b/g,
+        AADHAAR: /\b\d{4}\s?\d{4}\s?\d{4}\b/g,
+        PAN: /\b[A-Z]{5}\d{4}[A-Z]\b/g
       };
     }
-    /** Luhn check for credit card validation to reduce FP */
+    /** Luhn check for credit card validation */
     _luhnCheck(numStr) {
       const digits = numStr.replace(/\D/g, "");
       if (digits.length < 13 || digits.length > 19) return false;
@@ -175,6 +270,40 @@
       }
       return sum % 10 === 0;
     }
+    /** Verhoeff checksum for Aadhaar validation */
+    _verhoeffCheck(numStr) {
+      const digits = numStr.replace(/\D/g, "");
+      if (digits.length !== 12) return false;
+      const d = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+        [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+        [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+        [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+        [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+        [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+        [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+        [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+        [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+      ];
+      const p = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+        [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+        [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+        [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+        [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+        [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+        [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+      ];
+      const inv = [0, 4, 3, 2, 1, 5, 6, 7, 8, 9];
+      let c = 0;
+      const arr = digits.split("").reverse().map(Number);
+      for (let i = 0; i < arr.length; i++) {
+        c = d[c][p[i % 8][arr[i]]];
+      }
+      return c === 0;
+    }
     extractRegex(text, bbox, source) {
       const detections = [];
       for (const [type, regex] of Object.entries(this.regexes)) {
@@ -190,16 +319,36 @@
             const digitCount = match[0].replace(/\D/g, "").length;
             if (digitCount < 7) continue;
           }
+          if (type === "AADHAAR") {
+            if (!this._verhoeffCheck(match[0])) continue;
+          }
+          if (type === "PAN") {
+            const fourthChar = match[0][3];
+            if (!"CPHFATBLJG".includes(fourthChar)) continue;
+          }
           detections.push({ type, bbox, confidence: 0.75, sources: [source] });
         }
       }
       return detections;
     }
+    _hasUsableBbox(bbox) {
+      return !!(bbox && bbox.width > 0 && bbox.height > 0);
+    }
+    _looksLikePasswordField(element) {
+      const ac = (element.autocomplete || "").toLowerCase();
+      if (element.inputType === "password") return true;
+      if (ac === "current-password" || ac === "new-password") return true;
+      const idLower = (element.id || "").toLowerCase();
+      if (/(?:^|[-_])(?:password|passwd|pwd)(?:$|[-_])/i.test(idLower) || idLower === "password" || idLower.includes("password") || idLower.includes("passwd") || idLower.endsWith("pwd") || idLower.includes("-pwd") || idLower.includes("_pwd")) {
+        return true;
+      }
+      return false;
+    }
     detectDOM(element) {
       const detections = [];
       const bbox = element.bbox;
       const isInput = element.tag === "input" || element.tag === "textarea" || element.tag === "select";
-      if (element.inputType === "password" && element.text) {
+      if (isInput && this._looksLikePasswordField(element) && this._hasUsableBbox(bbox)) {
         detections.push({ type: "PASSWORD", bbox, confidence: 1, sources: ["DOM"] });
       }
       const ac = (element.autocomplete || "").toLowerCase();
@@ -226,6 +375,12 @@
         if ((idLower.includes("card") || idLower.includes("cc-")) && !ac) {
           detections.push({ type: "CREDIT_CARD", bbox, confidence: 0.8, sources: ["DOM"] });
         }
+        if ((idLower.includes("aadhaar") || idLower.includes("aadhar") || idLower.includes("uid")) && !ac) {
+          detections.push({ type: "AADHAAR", bbox, confidence: 0.8, sources: ["DOM"] });
+        }
+        if (idLower.includes("pan") && !ac) {
+          detections.push({ type: "PAN", bbox, confidence: 0.8, sources: ["DOM"] });
+        }
         if (idLower.includes("address") && !ac) {
           detections.push({ type: "ADDRESS", bbox, confidence: 0.8, sources: ["DOM"] });
         }
@@ -234,7 +389,7 @@
         }
       }
       const skipTagsForRegex = /* @__PURE__ */ new Set(["button", "a", "label", "h1", "h2", "h3", "h4", "h5", "h6"]);
-      if (element.text && !skipTagsForRegex.has(element.tag)) {
+      if (element.text && !skipTagsForRegex.has(element.tag) && !(isInput && this._looksLikePasswordField(element))) {
         detections.push(...this.extractRegex(element.text, bbox, "DOM_REGEX"));
       }
       return detections;
@@ -339,21 +494,37 @@
       }
       return planned;
     }
+    _isPasswordElement(el) {
+      if (el.inputType === "password") return true;
+      const ac = (el.autocomplete || "").toLowerCase();
+      if (ac === "current-password" || ac === "new-password") return true;
+      const idLower = (el.id || "").toLowerCase();
+      return idLower.includes("password") || idLower.includes("passwd") || idLower.includes("-pwd") || idLower.includes("_pwd") || idLower.endsWith("pwd");
+    }
     sanitizeDOM(rawDomElements, plannedRedactions) {
       const sanitized = JSON.parse(JSON.stringify(rawDomElements));
       for (const el of sanitized) {
-        let highestOverlap = 0;
+        const isPassword = this._isPasswordElement(el);
         let bestToken = null;
+        let highestOverlap = 0;
+        let passwordToken = null;
         for (const plan of plannedRedactions) {
           const overlap = this.calculateOverlap(el.bbox, plan.bbox);
           if (overlap > highestOverlap) {
             highestOverlap = overlap;
             bestToken = plan.token;
           }
+          if (plan.type === "PASSWORD" && overlap > 0) {
+            passwordToken = plan.token;
+          }
         }
-        if (bestToken || el.inputType === "password") {
-          el.text = bestToken || "[PASSWORD_1]";
-          if (el.value) el.value = bestToken || "[PASSWORD_1]";
+        if (isPassword) {
+          const token = passwordToken || "[PASSWORD_1]";
+          el.text = token;
+          if (el.value !== void 0) el.value = token;
+        } else if (bestToken) {
+          el.text = bestToken;
+          if (el.value) el.value = bestToken;
         }
       }
       return sanitized;
@@ -389,7 +560,9 @@
         "CREDIT_CARD",
         "PASSWORD",
         "AUTH_TOKEN",
-        "FACE"
+        "FACE",
+        "AADHAAR",
+        "PAN"
       ]);
     }
     verifyDOM(rawDom, sanitizedDom, plannedRedactions) {
@@ -401,8 +574,11 @@
             throw new Error(`Sanitized text matches raw text for element ${raw.id || raw.tag}`);
           }
         }
-        if (san.inputType === "password") {
-          if (san.text !== "[PASSWORD_1]" && !san.text.startsWith("[PASSWORD")) {
+        const ac = (san.autocomplete || "").toLowerCase();
+        const idLower = (san.id || "").toLowerCase();
+        const isPasswordField = san.inputType === "password" || ac === "current-password" || ac === "new-password" || idLower.includes("password") || idLower.includes("passwd") || idLower.includes("-pwd") || idLower.includes("_pwd") || idLower.endsWith("pwd");
+        if (isPasswordField) {
+          if (!san.text || !san.text.startsWith("[PASSWORD")) {
             throw new Error("Password field not properly sanitized");
           }
         }
@@ -414,18 +590,19 @@
       const ctx = redactedCanvas.getContext("2d");
       const imgData = ctx.getImageData(0, 0, redactedCanvas.width, redactedCanvas.height).data;
       for (const plan of plannedRedactions) {
-        const cx = Math.floor((plan.bbox.x + plan.bbox.width / 2) * scaleX);
-        const cy = Math.floor((plan.bbox.y + plan.bbox.height / 2) * scaleY);
-        if (cx >= 0 && cx < redactedCanvas.width && cy >= 0 && cy < redactedCanvas.height) {
-          const idx = (cy * redactedCanvas.width + cx) * 4;
-          const r = imgData[idx];
-          const g = imgData[idx + 1];
-          const b = imgData[idx + 2];
-          if (r !== 0 || g !== 0 || b !== 0) {
-            throw new Error(`Incomplete visual redaction at (${cx}, ${cy}) for ${plan.type}`);
-          }
-        } else {
-          throw new Error("Coordinate mismatch, out of bounds");
+        const { x, y, width, height } = plan.bbox;
+        if (!width || !height) continue;
+        const cx = Math.floor((x + width / 2) * scaleX);
+        const cy = Math.floor((y + height / 2) * scaleY);
+        if (cx < 0 || cx >= redactedCanvas.width || cy < 0 || cy >= redactedCanvas.height) {
+          continue;
+        }
+        const idx = (cy * redactedCanvas.width + cx) * 4;
+        const r = imgData[idx];
+        const g = imgData[idx + 1];
+        const b = imgData[idx + 2];
+        if (r !== 0 || g !== 0 || b !== 0) {
+          throw new Error(`Incomplete visual redaction at (${cx}, ${cy}) for ${plan.type}`);
         }
       }
       return true;
@@ -569,11 +746,13 @@
     constructor() {
       this.analyzer = new DOMAnalyzer();
       this.executor = new ActionExecutor(Config);
+      this.faceDetector = new FaceDetectorService();
       this.detector = new PIIDetector();
       this.fusion = new PIIFusion();
       this.redactor = new Redactor();
       this.gate = new PrivacyGate();
       this.secretProvider = new LocalSecretProvider();
+      this._secretsLoaded = false;
     }
     async run() {
       const timing = {};
@@ -584,8 +763,15 @@
       t = performance.now();
       const dataUri = await new Promise((resolve, reject) => {
         chrome.runtime.sendMessage({ type: "CAPTURE_TAB" }, (res) => {
-          if (res?.dataUri) resolve(res.dataUri);
-          else reject(new Error("Capture failed"));
+          if (chrome.runtime.lastError) {
+            reject(new Error("Capture failed: " + chrome.runtime.lastError.message));
+          } else if (res?.dataUri) {
+            resolve(res.dataUri);
+          } else if (res?.error) {
+            reject(new Error("Capture failed: " + res.error));
+          } else {
+            reject(new Error("Capture failed: no dataUri returned"));
+          }
         });
       });
       timing.screenshot = performance.now() - t;
@@ -594,15 +780,19 @@
       timing.preprocess = performance.now() - t;
       const ocrResults = [];
       timing.ocr = 0;
+      const scaleX = processedCanvas.width / window.innerWidth;
+      const scaleY = processedCanvas.height / window.innerHeight;
+      t = performance.now();
+      const faceDetections = await this.faceDetector.detectFaces(processedCanvas, scaleX, scaleY);
+      timing.face = performance.now() - t;
       t = performance.now();
       const rawDetections = this.detector.detectAll(domElements, ocrResults);
+      rawDetections.push(...faceDetections);
       const fusedDetections = this.fusion.fuse(rawDetections);
       timing.pii = performance.now() - t;
       t = performance.now();
       const plan = this.redactor.planRedaction(fusedDetections);
       timing.plan = performance.now() - t;
-      const scaleX = processedCanvas.width / window.innerWidth;
-      const scaleY = processedCanvas.height / window.innerHeight;
       t = performance.now();
       const redactedCanvas = await this.redactor.redactImage(processedCanvas, plan, scaleX, scaleY);
       timing.redact = performance.now() - t;
@@ -635,8 +825,8 @@
         })),
         image: redactedCanvas.toDataURL("image/jpeg", 0.8)
       };
-      logger.info("Privacy pipeline passed", { timing });
-      return { allowed: true, sanitizedContext: sanitizedPayload, timing };
+      logger.info("Privacy pipeline passed", { timing, detections: plan.length });
+      return { allowed: true, sanitizedContext: sanitizedPayload, timing, redactionPlan: plan };
     }
     async executeValidatedAction(action) {
       const ALLOWED = /* @__PURE__ */ new Set(["click", "scroll", "focus", "select", "wait", "type_local"]);
@@ -649,21 +839,97 @@
         return { success: true };
       }
       if (action.type === "type_local") {
+        await this._ensureSecretsLoaded();
+        if (!action.args?.secret_ref && typeof action.args?.text === "string") {
+          return this._executeTypeText(action);
+        }
         return this._executeTypeLocal(action);
       }
-      const selector = action.target ? `#${action.target}` : null;
+      const selector = ActionExecutor.selectorForTarget(action.target);
+      if (!selector && action.type !== "scroll") {
+        return { success: false, error: "No target specified" };
+      }
+      return this.executor.execute(action.type, selector || "body", action.args || {});
+    }
+    /** Normalize backend secret_ref values (password / PASSWORD_1 / [PASSWORD_1]). */
+    _normalizeSecretRef(ref) {
+      if (!ref || typeof ref !== "string") return null;
+      const cleaned = ref.trim().replace(/^\[|\]$/g, "");
+      const lower = cleaned.toLowerCase();
+      const base = lower.replace(/_\d+$/, "");
+      if (["email", "phone", "username", "password"].includes(base)) return base;
+      return lower;
+    }
+    async _ensureSecretsLoaded() {
+      if (this._secretsLoaded) return;
+      this._secretsLoaded = true;
+      try {
+        if (typeof chrome !== "undefined" && chrome.storage?.local) {
+          const data = await chrome.storage.local.get(["pva_secrets"]);
+          const secrets = data.pva_secrets || {};
+          for (const [key, value] of Object.entries(secrets)) {
+            if (typeof value === "string" && value.length > 0) {
+              try {
+                this.secretProvider.set(key, value);
+              } catch (_) {
+              }
+            }
+          }
+        }
+      } catch (_) {
+      }
+    }
+    /** Apply secrets from a SET_SECRETS message (in-memory + optional persist). */
+    setSecrets(secrets, persist = true) {
+      if (!secrets || typeof secrets !== "object") return;
+      for (const [key, value] of Object.entries(secrets)) {
+        if (typeof value === "string" && value.length > 0) {
+          try {
+            this.secretProvider.set(key, value);
+          } catch (_) {
+          }
+        }
+      }
+      this._secretsLoaded = true;
+      if (persist && typeof chrome !== "undefined" && chrome.storage?.local) {
+        chrome.storage.local.get(["pva_secrets"], (data) => {
+          const merged = { ...data.pva_secrets || {}, ...secrets };
+          chrome.storage.local.set({ pva_secrets: merged });
+        });
+      }
+    }
+    _executeTypeText(action) {
+      const selector = ActionExecutor.selectorForTarget(action.target);
       if (!selector) return { success: false, error: "No target specified" };
-      return this.executor.execute(action.type, selector, action.args || {});
+      let element;
+      try {
+        element = document.querySelector(selector);
+      } catch (e) {
+        return { success: false, error: "Invalid selector" };
+      }
+      if (!element) return { success: false, error: "Element not found" };
+      const tag = element.tagName?.toLowerCase();
+      if (tag !== "input" && tag !== "textarea") {
+        return { success: false, error: "Target must be input or textarea" };
+      }
+      if (element.disabled || element.readOnly) {
+        return { success: false, error: "Target is not editable" };
+      }
+      if ((element.type || "").toLowerCase() === "password") {
+        return { success: false, error: "Use secret_ref for password fields" };
+      }
+      LocalSecretProvider.insertSecret(element, String(action.args.text));
+      return { success: true };
     }
     _executeTypeLocal(action) {
-      const secretRef = action.args?.secret_ref;
+      const secretRef = this._normalizeSecretRef(action.args?.secret_ref);
       if (!secretRef) {
         return { success: false, error: "Missing secret_ref" };
       }
       if (!this.secretProvider.has(secretRef)) {
         return { success: false, error: "Secret not available" };
       }
-      const selector = action.target ? `#${action.target}` : null;
+      const selector = ActionExecutor.selectorForTarget(action.target);
       if (!selector) return { success: false, error: "No target specified" };
       let element;
       try {
@@ -710,25 +976,41 @@
     if (request.type === "ANALYZE_DOM") {
       logger2.info("Analyzing DOM");
       sendResponse({ elements: analyzer.analyzeDOM() });
+      return false;
     }
     if (request.type === "EXECUTE_ACTION") {
       logger2.info("Executing action", { type: request.actionType });
-      sendResponse(executor.execute(request.actionType, request.selector, request.args));
+      const selector = request.selector || ActionExecutor.selectorForTarget(request.target);
+      sendResponse(executor.execute(request.actionType, selector, request.args));
+      return false;
+    }
+    if (request.type === "SET_SECRETS") {
+      pipeline.setSecrets(request.secrets || {}, request.persist !== false);
+      sendResponse({ ok: true });
+      return false;
     }
     if (request.type === "PRIVACY_PIPELINE") {
-      pipeline.run().then(sendResponse);
+      pipeline.run().then(sendResponse).catch((e) => {
+        logger2.error("Pipeline failed: " + e.message);
+        sendResponse({ allowed: false, violations: [e.message] });
+      });
       return true;
     }
     if (request.type === "EXECUTE_VALIDATED_ACTION") {
-      pipeline.executeValidatedAction(request.action).then(sendResponse);
+      pipeline.executeValidatedAction(request.action).then(sendResponse).catch((e) => {
+        sendResponse({ success: false, error: e.message });
+      });
       return true;
     }
-    return true;
+    return false;
   });
   window.addEventListener("message", (event) => {
     if (event.source !== window || !event.data) return;
     if (event.data.type === "AGENT_TEST_TRIGGER") {
       chrome.runtime.sendMessage({ type: "START_AGENT" });
+    }
+    if (event.data.type === "AGENT_SET_SECRETS" && event.data.secrets) {
+      pipeline.setSecrets(event.data.secrets, false);
     }
   });
 })();

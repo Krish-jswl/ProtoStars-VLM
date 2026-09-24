@@ -14,16 +14,20 @@
         <p class="tagline">Your PII never leaves your browser</p>
     </div>
 
-    <div class="controls">
-        <button id="runBtn" class="btn btn-primary">
-            <span class="btn-icon">▶</span> Run Agent
-        </button>
-        <button id="stopBtn" class="btn btn-danger" style="display:none;">
-            <span class="btn-icon">■</span> Stop Agent
-        </button>
-        <button id="scanBtn" class="btn btn-secondary">
-            <span class="btn-icon">🔍</span> Scan Only
-        </button>
+    <div class="controls goal-controls" style="flex-direction: column; gap: 8px;">
+        <textarea id="goalInput" class="goal-input" placeholder="e.g. Login to my account, Order my cart..." style="width: 100%; height: 60px; padding: 8px; border-radius: 4px; border: 1px solid #333; background: #1a1a1a; color: #fff; resize: none;"></textarea>
+        <div style="display:flex; gap:6px; width:100%;">
+            <input id="secretEmail" type="email" placeholder="Local email" autocomplete="off" style="flex:1; padding:6px; border-radius:4px; border:1px solid #333; background:#1a1a1a; color:#fff;" />
+            <input id="secretPassword" type="password" placeholder="Local password" autocomplete="off" style="flex:1; padding:6px; border-radius:4px; border:1px solid #333; background:#1a1a1a; color:#fff;" />
+        </div>
+        <div style="display: flex; gap: 8px; width: 100%;">
+            <button id="goBtn" class="btn btn-primary" style="flex: 1;">
+                <span class="btn-icon">▶</span> Go
+            </button>
+            <button id="stopBtn" class="btn btn-danger" style="display:none; flex: 1;">
+                <span class="btn-icon">■</span> Stop
+            </button>
+        </div>
     </div>
 
     <div id="status-bar" class="status-bar">

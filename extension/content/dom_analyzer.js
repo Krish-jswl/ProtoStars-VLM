@@ -35,6 +35,12 @@ export class DOMAnalyzer {
     }
 
     analyzeElement(element) {
+        if (!element.id) {
+            if (!element.dataset?.pvaId) {
+                if (element.dataset) element.dataset.pvaId = "pva-" + Math.random().toString(36).substring(2, 8);
+            }
+            element.id = element.dataset?.pvaId || ("pva-" + Math.random().toString(36).substring(2, 8));
+        }
         const rect = element.getBoundingClientRect();
         const tag = element.tagName.toLowerCase();
 

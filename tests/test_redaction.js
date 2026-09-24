@@ -40,7 +40,7 @@ class MockCanvas {
     }
 }
 global.document.createElement = (tag) => {
-    if (tag === 'canvas') return createMockCanvas(1000, 1000);
+    if (tag === 'canvas') return new MockCanvas(1000, 1000);
     return dom.window.document.createElement(tag);
 };
 

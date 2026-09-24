@@ -34,14 +34,27 @@ export class Redactor {
         return planned;
     }
 
+    _isPasswordElement(el) {
+        if (el.inputType === 'password') return true;
+        const ac = (el.autocomplete || '').toLowerCase();
+        if (ac === 'current-password' || ac === 'new-password') return true;
+        const idLower = (el.id || '').toLowerCase();
+        return idLower.includes('password') || idLower.includes('passwd') ||
+            idLower.includes('-pwd') || idLower.includes('_pwd') || idLower.endsWith('pwd');
+    }
+
     sanitizeDOM(rawDomElements, plannedRedactions) {
         // Deep copy to avoid mutating raw context
         const sanitized = JSON.parse(JSON.stringify(rawDomElements));
 
         for (const el of sanitized) {
-            // Find if this element overlaps with any PII redaction plan
-            let highestOverlap = 0;
+            const isPassword = this._isPasswordElement(el);
+
+            // Prefer a PASSWORD plan token for password fields so the gate check passes
+            // even when another PII type overlaps the same bbox.
             let bestToken = null;
+            let highestOverlap = 0;
+            let passwordToken = null;
 
             for (const plan of plannedRedactions) {
                 const overlap = this.calculateOverlap(el.bbox, plan.bbox);
@@ -49,13 +62,18 @@ export class Redactor {
                     highestOverlap = overlap;
                     bestToken = plan.token;
                 }
+                if (plan.type === 'PASSWORD' && overlap > 0) {
+                    passwordToken = plan.token;
+                }
             }
 
-            // If overlap exists or element is explicitly a password
-            if (bestToken || el.inputType === 'password') {
-                el.text = bestToken || '[PASSWORD_1]';
-                // Remove sensitive attributes
-                if (el.value) el.value = bestToken || '[PASSWORD_1]';
+            if (isPassword) {
+                const token = passwordToken || '[PASSWORD_1]';
+                el.text = token;
+                if (el.value !== undefined) el.value = token;
+            } else if (bestToken) {
+                el.text = bestToken;
+                if (el.value) el.value = bestToken;
             }
         }
         return sanitized;

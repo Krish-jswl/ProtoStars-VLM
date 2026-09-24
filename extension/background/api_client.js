@@ -3,7 +3,7 @@ import { Logger } from '../shared/logger.js';
 
 const logger = new Logger('APIClient');
 
-const ALLOWED_ACTION_TYPES = new Set(['click','scroll','focus','select','wait','type_local']);
+const ALLOWED_ACTION_TYPES = new Set(['click','scroll','focus','select','wait','type_local','done']);
 
 export class APIClient {
     constructor(backendUrl, timeoutMs = 15000) {
