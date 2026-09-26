@@ -1,3 +1,17 @@
 .env
 .env.*
 !.env.example
+
+# Generated local-VLM assets. These are large, binary, and reproducible:
+# `npm run prepare:local-vlm-assets` downloads the weights and writes
+# models/model_manifest.json, and `npm run build:local-vlm` verifies every
+# file against that manifest, bundles the worker, and copies the ONNX Runtime.
+# The pin itself lives in scripts/, which is tracked, so nothing that matters
+# for reproducibility is lost by not committing the output.
+extension/local_agent/models/
+extension/local_agent/runtime/
+extension/local_agent/local_vlm_worker.bundle.js
+extension/local_agent/BUILD_INFO.json
+
+# Playwright run artifact.
+test-results/

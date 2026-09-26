@@ -35,8 +35,7 @@ npm install
 npm run build:content
 ```
 
-The q4f16 model files are already packaged under
-`extension/local_agent/models/`. To verify or explicitly prepare those pinned
+The SmolVLM weights are not committed. To fetch them and prepare the pinned
 assets in a clean checkout, run the network-enabled build-time preparation
 step before building the worker:
 
@@ -46,13 +45,23 @@ npm run build:local-vlm
 ```
 
 `prepare:local-vlm-assets` is a build-time operation and is never called by the
-extension. `build:local-vlm` verifies every packaged file's size and SHA-256
-digest, bundles the worker, and copies the local ONNX Runtime JS/WASM assets.
-The normal `npm test` command does not download model weights.
+extension. It downloads the pinned revision and writes
+`extension/local_agent/models/model_manifest.json`; `build:local-vlm` then
+verifies every downloaded file's size and SHA-256 digest against that manifest,
+bundles the worker, copies the local ONNX Runtime JS/WASM assets, and writes
+`BUILD_INFO.json`.
 
-If the model assets are intentionally not included in a development checkout,
-the runtime reports `LOCAL_VISION_UNAVAILABLE` and safely abstains; it does not
-fall back to a CDN or a server model.
+Everything that build produces is ignored by git: the weights, the runtime, the
+worker bundle, and `BUILD_INFO.json`. What is tracked is the worker source
+under `extension/local_agent/`, the build and download scripts, and the model
+pin those scripts assert, so a fresh clone reproduces the same artifact without
+the binary payload in history. The normal `npm test` command does not download
+model weights.
+
+If the model assets are intentionally not present in a checkout, the runtime
+reports `LOCAL_VISION_UNAVAILABLE` and safely abstains; it does not fall back to
+a CDN or a server model. That is the expected behaviour of `npm test` on a
+fresh clone, and the local vision tests skip themselves.
 
 ### After editing background code, reload the extension
 
