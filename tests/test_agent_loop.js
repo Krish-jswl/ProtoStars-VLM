@@ -480,7 +480,14 @@ test('agent loop stops instead of replaying an unchanged non-terminal plan', asy
  * result leads to.  Navigation rows are modelled at the top and the bottom of
  * the page, because a page's own menus sit below the query box too.
  */
-function createSearchFlow(goal = 'search google for "cpp tutorial" and open the first result') {
+/**
+ * A search driven end to end against the shape google.com actually ships: a
+ * bare <textarea role="combobox" name="q" aria-label="Search"> for the query and
+ * <input type="submit"> buttons labelled "Google Search" beside it.  The goal is
+ * deliberately unquoted, because a quoted query never reaches the engine-name
+ * handling and hid that bug from this flow.
+ */
+function createSearchFlow(goal = 'search google for cpp tutorial and open the first result') {
     const box = (x, y, width, height) => ({ x, y, width: width, height });
     const node = values => ({ visible: true, enabled: true, ...values });
     const link = (id, text, y, x = 120) =>
@@ -491,21 +498,39 @@ function createSearchFlow(goal = 'search google for "cpp tutorial" and open the 
         link(`${prefix}3`, 'News', y, 275),
         link(`${prefix}4`, 'Maps', y, 340)
     ];
+    // The real query box: no searchbox role, no placeholder, and a "textarea"
+    // inputType because dom_analyzer reads element.type off a textarea.
     const searchBox = text => node({
-        id: 'q', tag: 'input', role: 'searchbox', name: 'q', inputType: 'text',
-        ariaLabel: 'Search Google', placeholder: 'Search Google or type a URL',
-        bbox: box(120, 60, 600, 40), ...(text ? { text } : {})
+        id: 'ti6dpd', tag: 'textarea', role: 'combobox', name: 'q', inputType: 'textarea',
+        ariaLabel: 'Search', placeholder: '', autocomplete: 'off',
+        bbox: box(120, 100, 600, 44), ...(text ? { text } : {})
     });
+    // Buttons that say "search" but cannot hold text.  Google's desktop and
+    // mobile markup ship together, so each one is present twice.
+    const submit = (name, ariaLabel) => node({
+        id: '', tag: 'input', role: 'button', name, inputType: 'submit', ariaLabel,
+        bbox: box(600, 100, 40, 40)
+    });
+    const chrome = [
+        node({ id: '', tag: 'input', role: '', inputType: 'file', bbox: box(10, 10, 20, 20) }),
+        submit('btnK', 'Google Search'),
+        submit('btnI', "I'm Feeling Lucky"),
+        submit('btnK', 'Google Search'),
+        submit('btnI', "I'm Feeling Lucky"),
+        node({ id: '', tag: 'input', role: '', inputType: 'hidden', name: 'sca_esv', bbox: box(0, 0, 0, 0) }),
+        node({ id: '', tag: 'input', role: '', inputType: 'hidden', name: 'sxsrf', bbox: box(0, 0, 0, 0) })
+    ];
 
     const pages = {
-        HOME: [searchBox(''), ...navRun('h', 100), ...navRun('f', 900)],
-        TYPED: [searchBox('cpp tutorial'), ...navRun('h', 100), ...navRun('f', 900)],
+        HOME: [searchBox(''), ...chrome, ...navRun('h', 200), ...navRun('f', 900)],
+        TYPED: [searchBox('cpp tutorial'), ...chrome, ...navRun('h', 200), ...navRun('f', 900)],
         RESULTS: [
             searchBox('cpp tutorial'),
-            ...navRun('h', 100),
-            link('r1', 'The C++ programming language - cppreference', 180),
-            link('r2', 'C++ Tutorial - W3Schools', 260),
-            link('r3', 'Learn C++ - freeCodeCamp', 340),
+            ...chrome,
+            ...navRun('h', 200),
+            link('r1', 'The C++ programming language - cppreference', 280),
+            link('r2', 'C++ Tutorial - W3Schools', 360),
+            link('r3', 'Learn C++ - freeCodeCamp', 440),
             ...navRun('f', 900)
         ],
         OPENED: [node({
@@ -583,8 +608,8 @@ test('a full search then open-first-result flow reaches done without the backend
         `run ended as ${flow.finalUpdate().status}: ${flow.finalUpdate().error || ''}`);
 
     const typed = flow.executed.filter(action => action.type === 'type_local');
-    assert.deepStrictEqual(typed.map(action => [action.target, action.args.text]), [['q', 'cpp tutorial']],
-        'the query is typed once, into the search field');
+    assert.deepStrictEqual(typed.map(action => [action.target, action.args.text]), [['ti6dpd', 'cpp tutorial']],
+        'the query is typed once, into the search field, without the engine name');
     assert.strictEqual(flow.executed.filter(action => action.type === 'keypress').length, 1,
         'the search is submitted exactly once');
     assert.ok(flow.executed.some(action => action.type === 'click' && action.target === 'r1'),

@@ -324,6 +324,29 @@ describe('Local offline agent', () => {
         assert.ok(!result.actions.some(a => a.target === 'sso-google'));
     });
 
+    test('a hidden field is not a second credential field', () => {
+        // Forms routinely carry <input type="hidden" name="email"> alongside the
+        // real field.  Counting every <input> as a text field found two identity
+        // fields, so the login was reported ambiguous and the agent stalled on
+        // the login page instead of filling it in.
+        const dom = [
+            { id: 'user', tag: 'input', role: 'textbox', inputType: 'email', name: 'email', ariaLabel: 'Email', bbox: { x: 360, y: 200, width: 280, height: 44 }, visible: true, enabled: true },
+            { id: 'p1', tag: 'input', role: 'textbox', inputType: 'password', name: 'pass', ariaLabel: 'Password', bbox: { x: 360, y: 260, width: 280, hidden: true, visible: true, enabled: true } },
+            { id: 'h1', tag: 'input', role: '', inputType: 'hidden', name: 'email', visible: true, enabled: true },
+            { id: 'h2', tag: 'input', role: '', inputType: 'hidden', name: 'csrf', visible: true, enabled: true },
+            { id: 'go', tag: 'button', role: 'button', text: 'Log in', ariaLabel: 'Log in', bbox: { x: 360, y: 320, width: 120, height: 40 }, visible: true, enabled: true }
+        ];
+
+        const result = new LocalAgent().analyze('login', dom, {});
+        assert.strictEqual(result.decision, 'LOCAL', `login was not planned locally: ${result.reason}`);
+        assert.deepStrictEqual(result.actions.map(a => `${a.type}->${a.target}`), [
+            'type_local->user',
+            'type_local->p1',
+            'click->go',
+            'done->'
+        ], 'the visible fields are filled and the hidden ones are left alone');
+    });
+
     test('does not mistake a link above the fields for a submit', () => {
         // The federated region is above the first credential field; a control
         // there is never this form's submit.
@@ -883,6 +906,140 @@ describe('a search goal is the one case where a search field may be typed into',
         assert.strictEqual(loop._isUnsafeIdentityTextAction(
             { type: 'type_local', target: 'email', args: { text: 'cpp tutorial' } }, dom), true,
             'a search control on the page does not license the email field');
+    });
+});
+
+/**
+ * The search controls of the real google.com homepage.
+ *
+ * The idealized fixtures above give the search box role="searchbox" and a
+ * descriptive placeholder.  The shipped page does neither: it is a bare
+ * <textarea name="q" role="combobox" aria-label="Search">, flanked by
+ * <input type="submit"> buttons whose labels contain the word "search", plus a
+ * file picker, hidden fields and a second textarea.  These nodes are what
+ * dom_analyzer emits for that markup.
+ *
+ * Of those only two carry an id, so _usableNodes keeps the query box and
+ * discards the buttons: on the live page the submit buttons never competed for
+ * the field.  What did break the live page was the query text, which is what
+ * the engine-name cases below pin down.  The button cases are kept as unit
+ * rules about _findSearchField, which is reachable directly, and as the reason
+ * _isEditable refuses non-text inputs.
+ */
+describe('the real google.com homepage is searched through its textarea', () => {
+    const box = (x, y, width, height) => ({ x, y, width, height });
+
+    const QUERY_BOX = node('ti6dpd', 'textarea', {
+        role: 'combobox',
+        inputType: 'textarea',
+        name: 'q',
+        ariaLabel: 'Search',
+        placeholder: '',
+        autocomplete: 'off',
+        bbox: box(120, 100, 600, 44),
+        text: ''
+    });
+    const submit = (name, ariaLabel) => node('', 'input', {
+        role: 'button',
+        inputType: 'submit',
+        name,
+        ariaLabel,
+        bbox: box(600, 100, 40, 40)
+    });
+    const PAGE = () => [
+        node('', 'input', { role: '', inputType: 'file', bbox: box(10, 10, 20, 20) }),
+        QUERY_BOX,
+        // Google ships its desktop and mobile markup together, so each button
+        // appears twice.
+        submit('btnK', 'Google Search'),
+        submit('btnI', "I'm Feeling Lucky"),
+        submit('btnK', 'Google Search'),
+        submit('btnI', "I'm Feeling Lucky"),
+        node('', 'input', { role: '', inputType: 'hidden', name: 'sca_esv', bbox: box(0, 0, 0, 0) }),
+        node('', 'input', { role: '', inputType: 'hidden', name: 'sxsrf', bbox: box(0, 0, 0, 0) }),
+        // The cookie-consent textarea is a real text box, which is exactly why
+        // the field has to be chosen by score rather than by being the only one.
+        node('', 'textarea', { role: 'textbox', inputType: 'textarea', name: 'csi', bbox: box(0, 0, 0, 0) })
+    ];
+
+    test('a submit button labelled "Google Search" is not the search box', () => {
+        const agent = new LocalAgent();
+
+        assert.strictEqual(agent._findSearchField(PAGE())?.id, 'ti6dpd',
+            'the query goes into the textarea, not the button that submits it');
+    });
+
+    test('the real query box is recognised as an ordinary editable field', () => {
+        const agent = new LocalAgent();
+
+        assert.strictEqual(agent._isEditable(QUERY_BOX), true,
+            'a combobox textarea is a text target');
+    });
+
+    test('controls that cannot hold text are not editable targets', () => {
+        const agent = new LocalAgent();
+        const notEditable = [
+            submit('btnK', 'Google Search'),
+            node('', 'input', { role: '', inputType: 'hidden', name: 'sca_esv' }),
+            node('', 'input', { role: '', inputType: 'file' }),
+            node('', 'input', { role: 'checkbox', inputType: 'checkbox' }),
+            node('', 'input', { role: 'button', inputType: 'button' })
+        ];
+
+        for (const candidate of notEditable) {
+            assert.strictEqual(agent._isEditable(candidate), false,
+                `an input[type=${candidate.inputType}] cannot receive a query`);
+        }
+    });
+
+    test('the engine name is part of the phrasing, not the query', () => {
+        const agent = new LocalAgent();
+        // "search google for cpp tutorial" matched on "search", could not then
+        // match "for" because "google" was in the way, and captured the whole
+        // remainder as the query.
+        const cases = [
+            ['search google for cpp tutorial and open the first result', 'cpp tutorial'],
+            ['search on google for cpp tutorial', 'cpp tutorial'],
+            ['google for cpp tutorial', 'cpp tutorial'],
+            ['search for cpp tutorial', 'cpp tutorial'],
+            ['search cpp tutorial', 'cpp tutorial'],
+            ['search bing for c++ vectors', 'c++ vectors']
+        ];
+
+        for (const [goal, expected] of cases) {
+            assert.strictEqual(agent._searchIntent(goal)?.query, expected,
+                `query for ${JSON.stringify(goal)}`);
+        }
+    });
+
+    test('the whole query is typed into the real query box', () => {
+        const plan = new LocalAgent()._planSearch(
+            'search google for cpp tutorial and open the first result', PAGE());
+
+        assert.deepStrictEqual(plan?.actions?.map(action => [action.type, action.target]), [
+            ['focus', 'ti6dpd'],
+            ['type_local', 'ti6dpd'],
+            ['done', '']
+        ], 'focus, type, done against the real query box');
+        assert.strictEqual(plan.actions[1].args.text, 'cpp tutorial',
+            'only the query is typed, without the engine name');
+    });
+
+    test('the loop accepts the query the planner typed and refuses a button', () => {
+        const loop = new AgentLoop(3, 'search google for cpp tutorial and open the first result');
+        const dom = PAGE();
+
+        assert.strictEqual(loop._isUnsafeIdentityTextAction(
+            { type: 'type_local', target: 'ti6dpd', args: { text: 'cpp tutorial' } }, dom), false,
+            'the planner\'s own query is allowed into the search box');
+        // The planner and the gate used to parse the goal with two different
+        // regexes.  When they disagreed the gate blocked the correct query and
+        // the search simply never happened.
+        assert.strictEqual(loop._searchQuery(loop.goal), 'cpp tutorial',
+            'the loop and the planner read the same query out of the goal');
+        assert.strictEqual(loop._isUnsafeIdentityTextAction(
+            { type: 'type_local', target: 'ti6dpd', args: { text: 'buy now cheap' } }, dom), true,
+            'text that is not the goal\'s query is still refused');
     });
 });
 

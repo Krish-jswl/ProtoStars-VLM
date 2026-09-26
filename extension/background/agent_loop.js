@@ -1235,14 +1235,16 @@ export class AgentLoop {
         return /\b(?:search|query|keyword)\b/.test(identity);
     }
 
-    /** The query text a search goal is asking for, or '' when not a search. */
+    /**
+     * The query text a search goal is asking for, or '' when not a search.
+     *
+     * This reads the planner's intent rather than parsing the goal again.  Two
+     * independent parsers drift apart, and when they do the gate below starts
+     * rejecting the very query the planner legitimately typed, which looks
+     * exactly like the search not working.
+     */
     _searchQuery(goal) {
-        const value = String(goal || '');
-        if (!/\b(?:search|google|bing|find)\b/i.test(value)) return '';
-        const quoted = value.match(/["']([^"']{1,200})["']/);
-        if (quoted) return quoted[1].replace(/\s+/g, ' ').trim();
-        const after = value.match(/\b(?:search(?:\s+on)?|google|bing)\b[^a-z0-9]{0,12}(?:for\s+)?(.+?)(?=\s+(?:and|then|open|click)\b|$)/i);
-        return after ? after[1].replace(/\s+/g, ' ').trim() : '';
+        return this.localAgent?._searchIntent?.(goal)?.query || '';
     }
 
     _planHasUnsafeIdentityText(actions, domElements) {

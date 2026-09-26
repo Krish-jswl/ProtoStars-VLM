@@ -35,6 +35,19 @@ const MAX_SEQUENCE_CLAUSES = LOCAL_TASK_POLICY.maxSequenceClauses;
 // link is either descriptive or it is furniture.
 const DESCRIPTIVE_LINK_TEXT = 20;
 
+// The input types that accept free text.  An input element of any other type
+// (submit, hidden, file, checkbox, radio, button, image, range, color) cannot
+// hold a value the user typed, so it is never a text target.  "password" is
+// here because it does hold text: the login planner needs to recognise the
+// field, and it is _isOrdinaryEditable that refuses identity and password
+// targets for ordinary task text.
+const TEXT_ENTRY_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'number', 'password']);
+
+// Search engines a goal may name.  "search google for X" and "google for X"
+// both mean the query is X, so the engine word is part of how the goal is
+// phrased and never part of the query itself.
+const SEARCH_ENGINE_PATTERN = '(?:google|bing|duckduckgo|brave|ecosia|yahoo)';
+
 const CREDENTIAL_LITERAL_PATTERN = /\b(?:password|passwd|secret|token|api[_ -]?key|private[_ -]?key)\b\s*(?:is|=|:)\s*\S+/i;
 
 const SENSITIVE_TEXT_PATTERNS = [
@@ -695,7 +708,16 @@ export class LocalAgent {
         const quoted = value.match(/["']([^"']{1,200})["']/);
         let query = quoted ? quoted[1] : '';
         if (!query) {
-            const after = value.match(/\b(?:search(?:\s+(?:on|using|via))?|google|bing|find)\b[^a-z0-9]{0,12}(?:for\s+|about\s+)?(.+?)(?=\s+(?:and|then|open|click|visit|select|go)\b|[?.!]|$)/i);
+            // The engine word is a separate word from the preposition, so it has to
+        // be allowed for on its own.  Without it, "search google for cpp
+        // tutorial" matched on "search", failed to match "for" next, and
+        // captured "google for cpp tutorial" as the query.
+        const after = value.match(new RegExp(
+            `\\b(?:search(?:\\s+(?:on|using|via|with))?|${SEARCH_ENGINE_PATTERN}|find)\\b` +
+            `[^a-z0-9]{0,12}` +
+            `(?:${SEARCH_ENGINE_PATTERN}\\b[^a-z0-9]{0,12})?` +
+            `(?:for\\s+|about\\s+)?` +
+            `(.+?)(?=\\s+(?:and|then|open|click|visit|select|go)\\b|[?.!]|$)`, 'i'));
             query = after ? after[1] : '';
         }
         query = String(query || '').replace(/\s+/g, ' ').trim();
@@ -1288,9 +1310,23 @@ export class LocalAgent {
             (this._isButton(node) && node.getAttribute?.('aria-haspopup'));
     }
 
+    /**
+     * A control that can actually hold typed text.
+     *
+     * A submit button, a hidden field and a file picker are all input
+     * elements, but none of them can receive a query, and the content script
+     * already refuses to type into any of them.  Counting them as editable
+     * here let a button labelled "Google Search" outrank the real search box
+     * beside it, so the query was typed into a button and silently lost.
+     * This mirrors the content script's rule rather than inventing a new one.
+     */
     _isEditable(node) {
         const tag = String(node.tag || '').toLowerCase();
-        return tag === 'input' || tag === 'textarea' || String(node.inputType || '').toLowerCase() === 'contenteditable';
+        if (tag === 'textarea') return true;
+        if (String(node.inputType || '').toLowerCase() === 'contenteditable') return true;
+        if (tag !== 'input') return false;
+        const type = String(node.inputType || '').toLowerCase() || 'text';
+        return TEXT_ENTRY_INPUT_TYPES.has(type);
     }
 
     _isOrdinaryEditable(node) {

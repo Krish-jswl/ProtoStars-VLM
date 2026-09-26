@@ -144,6 +144,23 @@ goal must name a query, the target must be a real search control, and the text
 must equal that query exactly. The agent searches the page it is already on and
 never navigates to a URL of its own.
 
+The query and the safety gate that permits it are read by the same
+`_searchIntent` parser. A goal is split into clauses before planning, and the
+clause that opens a result carries no query at all, so the two readers have to
+agree about what the whole goal asked for; when they drift apart the gate
+blocks the planner's own correct query and the search silently never happens.
+
+An engine name is part of how the goal is phrased, not part of the query:
+"search google for cpp tutorial" and "google for cpp tutorial" both mean the
+query is `cpp tutorial`.
+
+Only a control that can hold typed text is a text target. `_isEditable` accepts
+a `textarea`, a `contenteditable`, and an `input` whose type takes text — and
+refuses `submit`, `hidden`, `file`, `checkbox`, `radio` and friends, matching
+the rule the content script already enforces. A button labelled "Google Search"
+and a hidden `name="email"` field are not text targets, and treating them as
+ones either types a query into a button or reports a login as ambiguous.
+
 ## Building and testing
 
 Build the content bundle before running JavaScript tests:
