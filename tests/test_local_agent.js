@@ -923,8 +923,7 @@ describe('a search goal is the one case where a search field may be typed into',
  * discards the buttons: on the live page the submit buttons never competed for
  * the field.  What did break the live page was the query text, which is what
  * the engine-name cases below pin down.  The button cases are kept as unit
- * rules about _findSearchField, which is reachable directly, and as the reason
- * _isEditable refuses non-text inputs.
+ * rules about _findSearchField, which is reachable directly.
  */
 describe('the real google.com homepage is searched through its textarea', () => {
     const box = (x, y, width, height) => ({ x, y, width, height });

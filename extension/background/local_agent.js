@@ -1314,11 +1314,12 @@ export class LocalAgent {
      * A control that can actually hold typed text.
      *
      * A submit button, a hidden field and a file picker are all input
-     * elements, but none of them can receive a query, and the content script
-     * already refuses to type into any of them.  Counting them as editable
-     * here let a button labelled "Google Search" outrank the real search box
-     * beside it, so the query was typed into a button and silently lost.
-     * This mirrors the content script's rule rather than inventing a new one.
+     * elements, but none of them can receive typed text, and the content
+     * script already refuses to type into any of them.  Counting them as
+     * editable here made a hidden <input name="email"> read as a second
+     * credential field, so a login was reported ambiguous and the agent
+     * stalled on the login page.  This mirrors the content script's rule
+     * rather than inventing a new one.
      */
     _isEditable(node) {
         const tag = String(node.tag || '').toLowerCase();
