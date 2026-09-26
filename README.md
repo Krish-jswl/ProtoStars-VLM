@@ -243,7 +243,3 @@ The project currently includes:
 The local vision model is intentionally lightweight. Complex reasoning, comparison, research, and other tasks outside the local execution capabilities may still require server-side reasoning.
 
 Local vision performance also depends on the available browser inference backend. WebGPU is preferred when supported, with WASM available as a fallback.
-
-## License
-
-Add your preferred license here.
