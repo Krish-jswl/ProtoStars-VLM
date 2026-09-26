@@ -1,10 +1,14 @@
 #!/bin/bash
 echo "=== Phase 8C E2E Test Runner ==="
 
+# The manifest loads the checked-in content bundle, not the ES module source.
+# Rebuild it before every browser run so runtime tests exercise current code.
 if ! command -v npx &> /dev/null; then
     echo "ERROR: npx is not installed."
     exit 1
 fi
+
+npx esbuild extension/content/content_main.js --bundle --format=iife --platform=browser --outfile=extension/content/content_bundle.js
 
 if ! npx playwright --version &> /dev/null; then
     echo "Playwright not installed, installing..."

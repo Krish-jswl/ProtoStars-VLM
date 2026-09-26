@@ -12,24 +12,38 @@ global.window = dom.window;
 
 // Polyfill minimal canvas Context2D for the tests
 class MockCanvas {
-    constructor(w, h) {
-        this.width = w;
-        this.height = h;
-        this.data = new Uint8ClampedArray(w * h * 4); // all zeros initially (transparent black)
-        // fill with white to test redaction
-        for(let i=0; i<this.data.length; i++) this.data[i] = 255;
+    constructor(w = 1000, h = 1000) {
+        this._width = w;
+        this._height = h;
+        this.reallocate();
     }
+    get width() { return this._width; }
+    set width(val) { this._width = val; this.reallocate(); }
+    get height() { return this._height; }
+    set height(val) { this._height = val; this.reallocate(); }
+
+    reallocate() {
+        this.data = new Uint8ClampedArray(this._width * this._height * 4);
+        // fill with white to test redaction
+        for (let i = 0; i < this.data.length; i++) this.data[i] = 255;
+    }
+
     getContext() {
+        let fillStyle = 'black';
         return {
+            set fillStyle(val) { fillStyle = val; },
+            get fillStyle() { return fillStyle; },
             drawImage: () => {},
             fillRect: (x, y, w, h) => {
+                const isBlack = (fillStyle === 'black' || fillStyle === '#000000' || fillStyle === '#000');
+                const val = isBlack ? 0 : 255;
                 for (let i = y; i < y + h; i++) {
                     for (let j = x; j < x + w; j++) {
-                        if (i >= 0 && i < this.height && j >= 0 && j < this.width) {
-                            const idx = (i * this.width + j) * 4;
-                            this.data[idx] = 0;     // R
-                            this.data[idx+1] = 0;   // G
-                            this.data[idx+2] = 0;   // B
+                        if (i >= 0 && i < this._height && j >= 0 && j < this._width) {
+                            const idx = (i * this._width + j) * 4;
+                            this.data[idx] = val;     // R
+                            this.data[idx+1] = val;   // G
+                            this.data[idx+2] = val;   // B
                             this.data[idx+3] = 255; // A
                         }
                     }

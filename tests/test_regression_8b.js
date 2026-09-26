@@ -60,7 +60,56 @@ describe('Phase 8B Regression Tests', () => {
         assert.ok(!detections.some(d => d.type === 'PERSON'), 'Button text must not be PERSON');
     });
 
+    test('profile-style person names in generic text wrappers are redacted', () => {
+        setupDOM('<div id="conversation"><span>Priya Sharma</span></div>');
+        const analyzer = new DOMAnalyzer();
+        const elements = analyzer.analyzeDOM();
+        const detector = new PIIDetector();
+        const detections = detector.detectAll(elements, []);
+        assert.ok(detections.some(d => d.type === 'PERSON'), 'Profile name should be detected');
+    });
+
+    test('nearby avatar and name regions are detected without site selectors', () => {
+        setupDOM('<div id="profile"><img id="avatar" alt="Profile picture"><span>Priya Sharma</span></div>');
+        const analyzer = new DOMAnalyzer();
+        const elements = analyzer.analyzeDOM();
+        const detector = new PIIDetector();
+        const detections = detector.detectAll(elements, []);
+        assert.ok(detections.some(d => d.type === 'FACE'));
+        assert.ok(detections.some(d => d.type === 'PERSON'));
+    });
+
+    test('profile image semantics are redacted as face regions', () => {
+        setupDOM('<img id="avatar" alt="Profile picture">');
+        const analyzer = new DOMAnalyzer();
+        const elements = analyzer.analyzeDOM();
+        const detector = new PIIDetector();
+        const detections = detector.detectAll(elements, []);
+        assert.ok(detections.some(d => d.type === 'FACE'));
+    });
+
+    test('OCR person names are conservatively detected', () => {
+        const detector = new PIIDetector();
+        const detections = detector.detectOCR({
+            text: 'Priya Sharma',
+            bbox: { x: 10, y: 20, width: 100, height: 20 }
+        });
+        assert.ok(detections.some(d => d.type === 'PERSON'));
+    });
+
     // 3. Password detection unchanged
+    test('login email and password fields produce stable redaction tokens', () => {
+        setupDOM('<input id="email" type="email" autocomplete="email"><input id="password" type="password" autocomplete="current-password">');
+        const analyzer = new DOMAnalyzer();
+        const elements = analyzer.analyzeDOM();
+        const detector = new PIIDetector();
+        const detections = detector.detectAll(elements, []);
+        const redactor = new Redactor();
+        const planned = redactor.planRedaction(detections);
+        assert.ok(planned.some(item => item.type === 'EMAIL' && item.token === '[EMAIL_1]'));
+        assert.ok(planned.some(item => item.type === 'PASSWORD' && item.token === '[PASSWORD_1]'));
+    });
+
     test('Password input still detected', () => {
         setupDOM('<input id="pw" type="password" />');
         const analyzer = new DOMAnalyzer();
@@ -118,6 +167,15 @@ describe('Phase 8B Regression Tests', () => {
     });
 
     // OCR trigger policy
+    test('OCR trigger fires for a profile image on a text-rich page', () => {
+        setupDOM('<p>Chat messages and controls</p><img id="avatar" alt="Profile picture">');
+        const analyzer = new DOMAnalyzer();
+        const elements = analyzer.analyzeDOM();
+        const policy = new OCRTriggerPolicy();
+        const result = policy.evaluate(elements);
+        assert.strictEqual(result.shouldRunOCR, true);
+    });
+
     test('OCR trigger fires for canvas content', () => {
         setupDOM('<canvas id="cv" width="400" height="300"></canvas>');
         const analyzer = new DOMAnalyzer();

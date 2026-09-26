@@ -8,7 +8,13 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:content": "esbuild extension/content/content_main.js --bundle --format=iife --platform=browser --outfile=extension/content/content_bundle.js",
+    "build:local-vlm": "node scripts/build_local_vlm.mjs",
+    "prepare:local-vlm-assets": "node scripts/prepare_local_vlm_assets.mjs",
+    "test:js": "node --test tests/test_*.js",
+    "test:local-vlm": "PVA_RUN_LOCAL_VLM=1 node --test tests/test_local_vlm_browser.js",
+    "test:server": "python -m pytest server/tests -q",
+    "test": "npm run build:content && npm run test:js"
   },
   "keywords": [],
   "author": "",
@@ -18,6 +24,7 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "@huggingface/transformers": "3.7.1",
     "@playwright/test": "^1.63.0",
     "esbuild": "^0.28.2"
   }

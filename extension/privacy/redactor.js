@@ -43,6 +43,28 @@ export class Redactor {
             idLower.includes('-pwd') || idLower.includes('_pwd') || idLower.endsWith('pwd');
     }
 
+    _isSensitiveText(value) {
+        return typeof value === 'string' && (
+            /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(value) ||
+            /\b(?:\d[ -]*?){13,19}\b/.test(value) ||
+            /\b\d{4}\s?\d{4}\s?\d{4}\b/.test(value) ||
+            /\b[A-Z]{5}\d{4}[A-Z]\b/.test(value) ||
+            /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4,10}/.test(value) ||
+            /\bey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./.test(value) ||
+            /\bghp_[A-Za-z0-9]{36}\b/.test(value) ||
+            /\bsk-[A-Za-z0-9]{20,}\b/.test(value)
+        );
+    }
+
+    _redactSensitiveMetadata(el, token) {
+        for (const key of ['autocomplete', 'placeholder', 'ariaLabel', 'name', 'label', 'title', 'testId']) {
+            if (this._isSensitiveText(el[key])) el[key] = token;
+        }
+        if (Array.isArray(el.options) && el.options.some(value => this._isSensitiveText(value))) {
+            el.options = el.options.map(() => token);
+        }
+    }
+
     sanitizeDOM(rawDomElements, plannedRedactions) {
         // Deep copy to avoid mutating raw context
         const sanitized = JSON.parse(JSON.stringify(rawDomElements));
@@ -71,12 +93,42 @@ export class Redactor {
                 const token = passwordToken || '[PASSWORD_1]';
                 el.text = token;
                 if (el.value !== undefined) el.value = token;
+                this._redactSensitiveMetadata(el, token);
             } else if (bestToken) {
                 el.text = bestToken;
                 if (el.value) el.value = bestToken;
+
+                // Semantic labels are useful to the planner, but a few sites
+                // put a real value in an aria-label/name/placeholder. Replace
+                // only metadata that actually looks sensitive; ordinary
+                // labels such as "Email address" remain available.
+                this._redactSensitiveMetadata(el, bestToken);
             }
         }
         return sanitized;
+    }
+
+    /** Replace common PII patterns in a non-DOM string such as a page URL. */
+    redactText(value) {
+        if (typeof value !== 'string' || !value) return '';
+        const counters = {};
+        const token = type => {
+            counters[type] = (counters[type] || 0) + 1;
+            return `[${type}_${counters[type]}]`;
+        };
+        const patterns = [
+            ['AUTH_TOKEN', /\b(?:ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_.-]+|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,})\b/g],
+            ['EMAIL', /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g],
+            ['CREDIT_CARD', /\b(?:\d[ -]*?){13,19}\b/g],
+            ['AADHAAR', /\b\d{4}\s?\d{4}\s?\d{4}\b/g],
+            ['PHONE', /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4,10}/g],
+            ['PAN', /\b[A-Z]{5}\d{4}[A-Z]\b/g]
+        ];
+        let result = value;
+        for (const [type, pattern] of patterns) {
+            result = result.replace(pattern, () => token(type));
+        }
+        return result;
     }
 
     async redactImage(rawCanvas, plannedRedactions, scaleX = 1.0, scaleY = 1.0) {

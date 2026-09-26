@@ -60,8 +60,12 @@ export class LocalSecretProvider {
         if (!element) return { valid: false, reason: 'Element not found' };
 
         const tag = element.tagName?.toLowerCase();
-        if (tag !== 'input' && tag !== 'textarea') {
+        const isContentEditable = LocalSecretProvider._isContentEditableElement(element);
+        if (tag !== 'input' && tag !== 'textarea' && !isContentEditable) {
             return { valid: false, reason: 'Target must be input or textarea' };
+        }
+        if (isContentEditable && secretRef === 'password') {
+            return { valid: false, reason: 'Passwords require a password input' };
         }
 
         if (element.disabled) {
@@ -93,23 +97,82 @@ export class LocalSecretProvider {
         return { valid: true };
     }
 
-    /** Insert a secret into a target element with proper DOM events. */
-    static insertSecret(element, value) {
-        // Use native input setter to trigger framework reactivity
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLInputElement.prototype, 'value'
-        )?.set;
-
-        if (nativeInputValueSetter) {
-            nativeInputValueSetter.call(element, value);
-        } else {
-            element.value = value;
+    static _isContentEditableElement(element) {
+        const tag = element?.tagName?.toLowerCase();
+        if (['input', 'textarea', 'select', 'button', 'a'].includes(tag)) return false;
+        const raw = element?.getAttribute?.('contenteditable');
+        if (raw !== null && raw !== undefined) {
+            const value = String(raw).toLowerCase();
+            return value === '' || value === 'true' || value === 'plaintext-only';
         }
+        const ancestor = element?.closest?.('[contenteditable]');
+        if (ancestor && ancestor !== element) {
+            const value = String(ancestor.getAttribute('contenteditable') || '').toLowerCase();
+            return value === '' || value === 'true' || value === 'plaintext-only';
+        }
+        return false;
+    }
 
-        // Dispatch standard input events so page JS reacts
-        // Use the element's own document Event constructor for cross-environment compat
-        const EventCtor = element.ownerDocument?.defaultView?.Event || Event;
-        element.dispatchEvent(new EventCtor('input', { bubbles: true }));
-        element.dispatchEvent(new EventCtor('change', { bubbles: true }));
+    /** Insert a value into a target element with proper DOM events. */
+    static insertSecret(element, value, options = {}) {
+        const isContentEditable = LocalSecretProvider._isContentEditableElement(element);
+
+        if (isContentEditable) {
+            // Rich-text editors do not expose a value property. Focus the
+            // editor, replace its text node, and emit the same input/change
+            // signals used by common React/Notion-style editors.
+            try { element.focus(); } catch (_) { /* best effort */ }
+            const view = element.ownerDocument?.defaultView || window;
+            const InputCtor = view.InputEvent || view.Event;
+            const inputInit = InputCtor === view.Event
+                ? { bubbles: true }
+                : { bubbles: true, inputType: 'insertText', data: String(value) };
+            if (options.beforeinput !== false &&
+                (typeof view.InputEvent === 'function' || InputCtor === view.Event)) {
+                try { element.dispatchEvent(new InputCtor('beforeinput', { ...inputInit, cancelable: true })); } catch (_) { /* best effort */ }
+            }
+            element.textContent = String(value);
+            element.dispatchEvent(new InputCtor('input', inputInit));
+            const EventCtor = view.Event || Event;
+            element.dispatchEvent(new EventCtor('change', { bubbles: true }));
+            // Notion-style title editors commonly persist on blur. The action
+            // layer normally keeps focus so a following safe keypress can be
+            // delivered; callers may explicitly request the legacy blur.
+            if (options.blur !== false) {
+                try { element.blur(); } catch (_) { /* best effort */ }
+            }
+        } else {
+            // Use the native setter for the element's actual realm/type.
+            // Calling HTMLInputElement's setter on a textarea can throw
+            // "Illegal invocation" in Chromium.
+            const view = element.ownerDocument?.defaultView || window;
+            const isTextarea = element.tagName?.toLowerCase() === 'textarea';
+            const prototype = isTextarea
+                ? view.HTMLTextAreaElement?.prototype
+                : view.HTMLInputElement?.prototype;
+            const nativeValueSetter = prototype
+                ? Object.getOwnPropertyDescriptor(prototype, 'value')?.set
+                : null;
+            const InputCtor = view.InputEvent || view.Event;
+            const inputInit = InputCtor === view.Event
+                ? { bubbles: true }
+                : { bubbles: true, inputType: 'insertText', data: String(value) };
+            if (options.beforeinput !== false) {
+                try { element.dispatchEvent(new InputCtor('beforeinput', { ...inputInit, cancelable: true })); } catch (_) { /* best effort */ }
+            }
+
+            if (nativeValueSetter) {
+                nativeValueSetter.call(element, value);
+            } else {
+                element.value = value;
+            }
+
+            // Dispatch standard input events so page JS reacts. Use the
+            // element's own document Event constructor for cross-environment
+            // compatibility.
+            const EventCtor = view.Event || Event;
+            element.dispatchEvent(new InputCtor('input', inputInit));
+            element.dispatchEvent(new EventCtor('change', { bubbles: true }));
+        }
     }
 }

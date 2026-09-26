@@ -35,12 +35,23 @@ h1 { font-size: 16px; font-weight: 600; color: #f0f6fc; }
 .btn-secondary { background: #21262d; color: #c9d1d9; }
 .btn-secondary:hover { background: #30363d; }
 
+.secret-hint { width: 100%; color: #7d8590; font-size: 10px; line-height: 1.35; }
+
 /* Status Bar */
 .status-bar {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 20px; background: #161b22; border-bottom: 1px solid #21262d;
     font-size: 12px; color: #8b949e;
 }
+.route-mini {
+    margin-left: auto; padding: 2px 7px; border-radius: 10px;
+    background: #21262d; color: #8b949e; font-size: 10px; font-weight: 600;
+}
+.route-mini.route-local { background: #1f3a2a; color: #56d364; }
+.route-mini.route-local-vision { background: #1f3a5f; color: #58a6ff; }
+.route-mini.route-server { background: #3f2f1f; color: #f0b858; }
+.route-mini.route-privacy { background: #2a1f3f; color: #bc8cff; }
+.route-mini.route-error { background: #3f1f1f; color: #f85149; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot-idle { background: #484f58; }
 .dot-running { background: #3fb950; animation: pulse 1.5s infinite; }
@@ -73,6 +84,40 @@ h1 { font-size: 16px; font-weight: 600; color: #f0f6fc; }
 }
 .stat-value { font-size: 24px; font-weight: 700; color: #f0f6fc; }
 .stat-label { font-size: 11px; color: #7d8590; margin-top: 2px; }
+
+/* Model / execution route */
+.route-section { margin-bottom: 16px; }
+.route-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.route-heading h3 { font-size: 13px; color: #8b949e; }
+.route-live {
+    padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+    background: #21262d; color: #8b949e;
+}
+.route-live.route-local { background: #1f3a2a; color: #56d364; }
+.route-live.route-local-vision { background: #1f3a5f; color: #58a6ff; }
+.route-live.route-server { background: #3f2f1f; color: #f0b858; }
+.route-live.route-privacy { background: #2a1f3f; color: #bc8cff; }
+.route-live.route-error { background: #3f1f1f; color: #f85149; }
+.route-card {
+    background: #161b22; border: 1px solid #21262d; border-radius: 8px;
+    padding: 12px;
+}
+.route-primary { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #f0f6fc; }
+.route-indicator { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: #484f58; }
+.route-indicator.route-local { background: #3fb950; box-shadow: 0 0 8px rgba(63,185,80,.45); }
+.route-indicator.route-local-vision { background: #58a6ff; box-shadow: 0 0 8px rgba(88,166,255,.45); }
+.route-indicator.route-server { background: #f0b858; box-shadow: 0 0 8px rgba(240,184,88,.45); }
+.route-indicator.route-privacy { background: #bc8cff; box-shadow: 0 0 8px rgba(188,140,255,.45); }
+.route-indicator.route-error { background: #f85149; }
+.route-detail { margin: 7px 0 10px 17px; color: #7d8590; font-size: 11px; line-height: 1.4; }
+.route-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-left: 17px; }
+.route-badge { padding: 3px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.route-neutral { background: #21262d; color: #8b949e; }
+.route-local { background: #1f3a2a; color: #56d364; }
+.route-local-vision { background: #1f3a5f; color: #58a6ff; }
+.route-server { background: #3f2f1f; color: #f0b858; }
+.route-privacy { background: #2a1f3f; color: #bc8cff; }
+.route-error { background: #3f1f1f; color: #f85149; }
 
 /* Timing Bars */
 .timing-section h3, .cycle-section h3 { font-size: 13px; color: #8b949e; margin-bottom: 8px; }

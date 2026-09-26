@@ -10,7 +10,11 @@ let state = {
     detections: [],
     actions: [],
     logs: [],
-    screenshotDataUri: null
+    screenshotDataUri: null,
+    route: 'idle',
+    model: '—',
+    modelStatus: 'idle',
+    routeDetail: 'The route will appear when the agent starts.'
 };
 
 // DOM refs
@@ -22,6 +26,13 @@ const clearBtn = document.getElementById('clearBtn');
 const goalInput = document.getElementById('goalInput');
 const secretEmail = document.getElementById('secretEmail');
 const secretPassword = document.getElementById('secretPassword');
+const routeMini = document.getElementById('route-mini');
+const routeLive = document.getElementById('route-live');
+const routeIndicator = document.getElementById('route-indicator');
+const routeLabel = document.getElementById('route-label');
+const routeDetail = document.getElementById('route-detail');
+const modelBadge = document.getElementById('model-badge');
+const executionBadge = document.getElementById('execution-badge');
 
 // Restore locally-stored credential refs (values stay in chrome.storage, never logged)
 chrome.storage.local.get(['pva_secrets'], (data) => {
@@ -44,6 +55,73 @@ document.querySelectorAll('.tab').forEach(tab => {
 function setStatus(text, level) {
     statusText.textContent = text;
     statusDot.className = 'dot dot-' + level;
+}
+
+const ROUTE_META = {
+    idle: { label: 'Idle', short: 'IDLE', model: '—', execution: '—' },
+    local: { label: 'Local browser planner', short: 'LOCAL', model: 'None (local rules)', execution: 'Browser' },
+    'local-vision': { label: 'Local vision model', short: 'LOCAL VLM', model: 'Local VLM', execution: 'Browser' },
+    privacy: { label: 'Local privacy pipeline', short: 'PRIVACY', model: 'Local OCR/PII', execution: 'Browser' },
+    server: { label: 'Backend server planner', short: 'SERVER', model: 'Configured server provider', execution: 'Browser actions' }
+};
+const MODEL_LABELS = {
+    'local-rules': 'None (local rules)',
+    'local-vlm': 'Local VLM',
+    'local-privacy': 'Local OCR/PII',
+    'server-vlm': 'Configured server provider',
+    'server-provider': 'Configured server provider'
+};
+
+function setRouteState(route = 'idle', modelStatus = 'idle', detail = '', model = '') {
+    const normalizedRoute = ROUTE_META[route] ? route : 'idle';
+    state.route = normalizedRoute;
+    state.modelStatus = modelStatus || 'idle';
+    state.routeDetail = detail || (normalizedRoute === 'idle'
+        ? 'The route will appear when the agent starts.'
+        : ROUTE_META[normalizedRoute].label);
+    state.model = MODEL_LABELS[model] || model || ROUTE_META[normalizedRoute].model;
+    renderRoute();
+}
+
+function renderRoute() {
+    const meta = ROUTE_META[state.route] || ROUTE_META.idle;
+    const status = state.modelStatus || 'idle';
+    const statusLabel = status === 'running' ? 'RUNNING' :
+        status === 'starting' ? 'STARTING' :
+            status === 'done' ? 'COMPLETE' :
+                status === 'error' ? 'ERROR' :
+                    status === 'unavailable' ? 'UNAVAILABLE' : 'IDLE';
+    const routeClass = status === 'error' || status === 'unavailable' ? 'route-error' : state.route;
+    if (routeMini) {
+        routeMini.className = `route-mini ${routeClass}`;
+        routeMini.textContent = meta.short;
+    }
+    if (routeLive) {
+        routeLive.className = `route-live ${routeClass}`;
+        routeLive.textContent = statusLabel;
+    }
+    if (routeIndicator) routeIndicator.className = `route-indicator ${routeClass}`;
+    if (routeLabel) {
+        routeLabel.textContent = state.route === 'idle'
+            ? 'No task running'
+            : status === 'done' ? `${meta.label} complete` : meta.label;
+    }
+    if (routeDetail) routeDetail.textContent = state.routeDetail;
+    if (modelBadge) {
+        modelBadge.className = `route-badge ${routeClass === 'idle' ? 'route-neutral' : routeClass}`;
+        modelBadge.textContent = `Model: ${state.model}`;
+    }
+    if (executionBadge) {
+        executionBadge.className = `route-badge ${routeClass === 'idle' ? 'route-neutral' : routeClass}`;
+        executionBadge.textContent = `Execution: ${meta.execution}`;
+    }
+}
+
+function routeFromSource(source) {
+    if (source === 'local') return 'local';
+    if (source === 'local-vision') return 'local-vision';
+    if (source === 'server') return 'server';
+    return '';
 }
 
 // Add log
@@ -137,6 +215,7 @@ function renderLogs() {
 }
 
 function renderAll() {
+    renderRoute();
     renderOverview();
     renderDetections();
     renderScreenshot();
@@ -158,12 +237,66 @@ async function ensureContentScript(tabId) {
     });
 }
 
+/** Confirm that the content-script world has the Tesseract runtime. */
+/** Generate a local-only privacy preview for the popup. */
+async function loadPrivacyPreview(tabId) {
+    setRouteState('privacy', 'running', 'Detecting and redacting PII locally before task execution');
+    const preview = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(tabId, { type: 'PRIVACY_PREVIEW' }, (response) => {
+            void chrome.runtime.lastError;
+            resolve(response || null);
+        });
+    });
+    if (!preview) {
+        addLog('Local privacy preview unavailable; continuing with browser-local action planning.', 'warn');
+        return;
+    }
+    if (Array.isArray(preview.detections)) {
+        state.detections = preview.detections;
+        state.piiCount = preview.detections.length;
+        state.redactedCount = preview.detections.length;
+    }
+    if (preview.screenshot) state.screenshotDataUri = preview.screenshot;
+    if (preview.timing && typeof preview.timing === 'object') {
+        state.timing = { ...state.timing, ...preview.timing };
+    }
+    if (preview.allowed) {
+        addLog(`Local privacy preview ready: ${state.piiCount} PII region(s) redacted.`);
+        setRouteState('privacy', 'done', 'Local redaction complete; task planner is starting');
+    } else {
+        addLog('Local privacy preview could not be verified; no screenshot was shown.', 'warn');
+        setRouteState('privacy', 'error', 'Privacy preview failed closed; no screenshot was shown');
+    }
+    renderAll();
+}
+
+function ensureOCRRuntime(tabId) {
+    return new Promise((resolve) => {
+        chrome.tabs.sendMessage(tabId, { type: 'OCR_RUNTIME_STATUS' }, (response) => {
+            if (chrome.runtime.lastError) {
+                resolve(false);
+            } else {
+                resolve(!!response?.available);
+            }
+        });
+    });
+}
+
 // ── Go button ─────────────────────────────────────────────────────────────────
 goBtn.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) return;
 
     const goal = goalInput ? goalInput.value.trim() : '';
+    if (!goal) {
+        addLog('Enter a command before starting the agent.', 'warn');
+        setStatus('Enter a goal', 'idle');
+        return;
+    }
+    if (/\b(?:log\s*in|login|sign\s*in|signin)\b/i.test(goal) &&
+        (!secretEmail?.value || !secretPassword?.value)) {
+        addLog('Login fields are empty in the popup. Browser-autofill can be used; otherwise enter local email/password above. Values stay in this browser.', 'warn');
+    }
 
     // Persist local secrets for type_local (never sent to backend)
     const secrets = {};
@@ -173,8 +306,9 @@ goBtn.addEventListener('click', async () => {
         await chrome.storage.local.set({ pva_secrets: secrets });
     }
 
-    addLog('Starting agent' + (goal ? ` with goal: "${goal}"` : '') + '...');
+    addLog('Starting agent...');
     setStatus('Starting...', 'running');
+    setRouteState('local', 'starting', 'Preparing the browser-local planner');
 
     // 1. Ensure content script is present, inject if missing
     const isLoaded = await ensureContentScript(tab.id);
@@ -183,7 +317,10 @@ goBtn.addEventListener('click', async () => {
         try {
             await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
-                files: ['content/content_bundle.js']
+                files: [
+                    'lib/tesseract/tesseract.min.js',
+                    'content/content_bundle.js'
+                ]
             });
             addLog('Content script injected. Waiting for init...', 'info');
             await new Promise(r => setTimeout(r, 600));
@@ -206,6 +343,28 @@ goBtn.addEventListener('click', async () => {
         addLog('Content script active. Found ' + state.elements + ' elements.');
     }
 
+    // A content bundle injected into an already-open tab may predate the
+    // manifest's Tesseract entry. Load the worker runtime separately in that
+    // case so a selective OCR request does not fail closed with a missing
+    // library.
+    if (!(await ensureOCRRuntime(tab.id))) {
+        try {
+            await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: ['lib/tesseract/tesseract.min.js']
+            });
+            addLog('OCR runtime loaded.', 'info');
+        } catch (e) {
+            // The privacy pipeline will still fail closed if OCR is required.
+            addLog('OCR runtime could not be loaded: ' + e.message, 'warn');
+        }
+    }
+
+    // Generate a redacted local-only preview before starting the action loop.
+    // This never contacts the backend; it only populates the popup UI.
+    addLog('Generating local privacy preview...');
+    await loadPrivacyPreview(tab.id);
+
     // Push secrets into the content-script LocalSecretProvider
     if (Object.keys(secrets).length) {
         await new Promise((resolve) => {
@@ -216,8 +375,9 @@ goBtn.addEventListener('click', async () => {
         });
     }
 
-    // 2. Start agent loop in service worker (passes goal — uses START_GOAL_AGENT)
-    //    The agent loop itself runs the privacy pipeline; we don't duplicate it here.
+    // 2. Start agent loop in service worker (passes goal — uses START_GOAL_AGENT).
+    //    The local preview above is UI-only; the loop uses its own gated path
+    //    if/when it needs the backend.
     chrome.runtime.sendMessage(
         { type: 'START_GOAL_AGENT', tabId: tab.id, goal },
         (response) => {
@@ -232,13 +392,18 @@ goBtn.addEventListener('click', async () => {
                 goBtn.style.display = 'none';
                 stopBtn.style.display = 'flex';
                 setStatus('Running', 'running');
-                addLog('Agent loop started ✅');
+                setRouteState('local', 'starting', 'Planner started; waiting for the execution route');
+                addLog(response.alreadyRunning
+                    ? 'Agent already running; duplicate start ignored.'
+                    : 'Agent loop started ✅');
             } else if (response?.error) {
                 addLog('Failed to start: ' + response.error, 'error');
                 setStatus('Error', 'error');
+                setRouteState(state.route, 'error', response.error, state.model);
             } else {
                 addLog('Unexpected response: ' + JSON.stringify(response), 'warn');
                 setStatus('Error', 'error');
+                setRouteState(state.route, 'error', 'The service worker returned an unexpected response', state.model);
             }
             renderAll();
         }
@@ -254,16 +419,38 @@ stopBtn.addEventListener('click', async () => {
         goBtn.style.display = 'flex';
         stopBtn.style.display = 'none';
         setStatus('Stopped', 'idle');
+        setRouteState('idle', 'idle', 'The task was stopped by the user');
         addLog('Agent stopped');
         renderAll();
     });
 });
 
+function updateRouteFromMessage(msg) {
+    const sourceRoute = routeFromSource(msg.source);
+    const route = msg.route || sourceRoute;
+    if (route) {
+        let status = msg.modelStatus || 'running';
+        if (msg.status === 'done') status = 'done';
+        if (msg.status === 'error') status = 'error';
+        setRouteState(route, status, msg.routeDetail || '', msg.model || '');
+    } else if (msg.status === 'error') {
+        setRouteState(state.route, 'error', msg.error || 'The agent reported an error', state.model);
+    } else if (msg.status === 'done') {
+        setRouteState(state.route, 'done', 'Task completed', state.model);
+    }
+}
+
 // ── Listen for agent loop updates from background ─────────────────────────────
 chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'AGENT_UPDATE') {
+        updateRouteFromMessage(msg);
         if (msg.cycle) state.cycles = msg.cycle;
         if (msg.timing) state.timing = msg.timing;
+        if (msg.localVision && Object.keys(msg.localVision).length > 0) {
+            const vision = msg.localVision;
+            const timing = vision.totalMs != null ? `, ${Math.round(vision.totalMs)}ms` : '';
+            addLog(`Local vision: ${vision.backend || 'unknown'} (${vision.status || 'unknown'}${timing})`, 'info');
+        }
         if (msg.actionsExecuted !== undefined) state.actionCount += msg.actionsExecuted;
         if (msg.detections) {
             state.detections = msg.detections;
@@ -288,7 +475,7 @@ chrome.runtime.onMessage.addListener((msg) => {
             stopBtn.style.display = 'none';
             setStatus('Error', 'error');
             addLog('Agent error: ' + (msg.error || 'unknown'), 'error');
-        } else if (msg.cycle) {
+        } else if (msg.cycle && msg.actionsExecuted !== undefined) {
             addLog(`Cycle ${msg.cycle} complete — ${msg.actionsExecuted || 0} action(s)`);
         }
         if (msg.log) {
@@ -301,7 +488,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ── Clear ─────────────────────────────────────────────────────────────────────
 clearBtn.addEventListener('click', (e) => {
     e.preventDefault();
-    state = { running: false, elements: 0, piiCount: 0, redactedCount: 0, actionCount: 0, cycles: 0, timing: {}, detections: [], actions: [], logs: [], screenshotDataUri: null };
+    state = { running: false, elements: 0, piiCount: 0, redactedCount: 0, actionCount: 0, cycles: 0, timing: {}, detections: [], actions: [], logs: [], screenshotDataUri: null, route: 'idle', model: '—', modelStatus: 'idle', routeDetail: 'The route will appear when the agent starts.' };
     setStatus('Idle', 'idle');
     renderAll();
 });

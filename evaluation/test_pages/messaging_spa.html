@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Synthetic Messaging SPA</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 2rem; max-width: 42rem; }
+    #message-editor { min-height: 3rem; border: 1px solid #888; padding: .6rem; }
+    #conversation { min-height: 8rem; border: 1px solid #ccc; padding: .6rem; margin-bottom: 1rem; }
+    .message { margin: .35rem 0; }
+  </style>
+</head>
+<body>
+  <h1>Synthetic Messaging SPA</h1>
+  <div id="conversation" aria-label="Conversation"></div>
+  <div id="message-editor" contenteditable="true" role="textbox" aria-label="Message"></div>
+  <button id="send-message" type="button" aria-label="Send message">Send</button>
+  <p id="status" role="status"></p>
+  <script>
+    (() => {
+      const editor = document.getElementById('message-editor');
+      const send = document.getElementById('send-message');
+      const conversation = document.getElementById('conversation');
+      const status = document.getElementById('status');
+      const state = window.pvaTestState = { messages: [], submissions: 0 };
+      send.addEventListener('click', () => {
+        const text = (editor.innerText || editor.textContent || '').trim();
+        if (!text) return;
+        state.submissions += 1;
+        state.messages.push(text);
+        const message = document.createElement('div');
+        message.className = 'message';
+        message.textContent = text;
+        conversation.appendChild(message);
+        editor.textContent = '';
+        status.textContent = `Sent ${text}`;
+      });
+    })();
+  </script>
+</body>
+</html>

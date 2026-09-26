@@ -8,7 +8,7 @@ export class OCRProvider {
     }
 
     /**
-     * @param {ImageData | HTMLCanvasElement} image 
+     * @param {ImageData | HTMLCanvasElement} image
      * @returns {Promise<Array<{text: string, bbox: number[], confidence: number, source: string}>>}
      */
     async recognize(image) {

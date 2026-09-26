@@ -95,7 +95,7 @@ describe('Phase 6 Integration Tests', () => {
 
     // D: Malformed backend response is rejected
     test('D: Malformed backend action rejected', () => {
-        const ALLOWED = new Set(['click','scroll','focus','select','wait','type_local']);
+        const ALLOWED = new Set(['click','scroll','focus','select','wait','keypress','type_local']);
         const action = { type: 'eval', target: 'window' };
         const allowed = ALLOWED.has(action.type);
         assert.strictEqual(allowed, false);
@@ -121,7 +121,7 @@ describe('Phase 6 Integration Tests', () => {
 
     // F: Arbitrary JS action rejected
     test('F: Arbitrary JS type rejected', () => {
-        const ALLOWED = new Set(['click','scroll','focus','select','wait','type_local']);
+        const ALLOWED = new Set(['click','scroll','focus','select','wait','keypress','type_local']);
         const maliciousAction = { type: 'javascript:alert(1)', target: 'body' };
         assert.strictEqual(ALLOWED.has(maliciousAction.type), false);
     });

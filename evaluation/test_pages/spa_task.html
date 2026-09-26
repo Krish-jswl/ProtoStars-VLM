@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synthetic Task SPA</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 2rem; max-width: 42rem; }
+    button { padding: .55rem .8rem; }
+    #composer { margin-top: 1rem; padding: 1rem; border: 1px solid #bbb; }
+    #task-editor { min-height: 2.5rem; padding: .5rem; border: 1px solid #888; }
+    #task-list { margin-top: 1rem; }
+    #task-list li { padding: .35rem 0; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Synthetic Task SPA</h1>
+  <p id="instructions">Click Add task, enter a title, then submit.</p>
+
+  <button id="add-task-trigger" type="button">Add task</button>
+
+  <section id="composer" hidden aria-label="Task composer">
+    <form id="task-form">
+      <div id="task-editor" contenteditable="true" role="textbox" aria-label="Task title"></div>
+      <button id="add-task-submit" type="submit">Add task</button>
+    </form>
+  </section>
+
+  <ul id="task-list" aria-live="polite"></ul>
+  <p id="status" role="status"></p>
+
+  <script>
+    (() => {
+      const trigger = document.getElementById('add-task-trigger');
+      const composer = document.getElementById('composer');
+      const form = document.getElementById('task-form');
+      const editor = document.getElementById('task-editor');
+      const submit = document.getElementById('add-task-submit');
+      const list = document.getElementById('task-list');
+      const status = document.getElementById('status');
+      const params = new URLSearchParams(location.search);
+      const enterOnly = params.get('enter') === '1';
+      const duplicateControls = params.get('duplicates') === '1';
+      const state = window.pvaTestState = {
+        tasks: [],
+        submissions: 0,
+        rerenders: 0,
+        opened: false,
+        enterOnly,
+        duplicateControls
+      };
+
+      // This models a framework-controlled composer: the trigger disappears
+      // and the editor is mounted only after a short asynchronous update.
+      trigger.addEventListener('click', () => {
+        state.opened = true;
+        setTimeout(() => {
+          trigger.remove();
+          composer.hidden = false;
+          if (duplicateControls) {
+            const decoy = document.createElement('button');
+            decoy.id = 'add-task-decoy';
+            decoy.type = 'button';
+            decoy.textContent = 'Add task';
+            composer.prepend(decoy);
+          }
+          if (enterOnly) submit.hidden = true;
+          editor.focus();
+        }, 35);
+      });
+
+      const addTask = () => {
+        const title = (editor.innerText || editor.textContent || '').trim();
+        if (!title) {
+          status.textContent = 'Enter a task title';
+          return false;
+        }
+        state.submissions += 1;
+        state.tasks.push(title);
+        // Replace the list subtree to exercise stale-target/re-observation
+        // handling rather than relying on a static page.
+        const fragment = document.createDocumentFragment();
+        for (const item of state.tasks) {
+          const li = document.createElement('li');
+          li.textContent = item;
+          fragment.appendChild(li);
+        }
+        list.replaceChildren(fragment);
+        state.rerenders += 1;
+        status.textContent = `Added ${title}`;
+        editor.textContent = '';
+        return true;
+      };
+
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        addTask();
+      });
+      editor.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          if (typeof form.requestSubmit === 'function') form.requestSubmit();
+          else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

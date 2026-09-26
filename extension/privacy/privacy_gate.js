@@ -1,5 +1,15 @@
 
 export class PrivacyGate {
+    _containsSensitiveText(value) {
+        return typeof value === 'string' && (
+            /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(value) ||
+            /\b(?:\d[ -]*?){13,19}\b/.test(value) ||
+            /\b\d{4}\s?\d{4}\s?\d{4}\b/.test(value) ||
+            /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4,10}/.test(value) ||
+            /\b(?:ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.)/.test(value)
+        );
+    }
+
     constructor() {
         this.KNOWN_TYPES = new Set([
             'EMAIL', 'PHONE', 'PERSON', 'ADDRESS', 
@@ -20,6 +30,9 @@ export class PrivacyGate {
                     throw new Error(`Sanitized text matches raw text for element ${raw.id || raw.tag}`);
                 }
             }
+            if (this._containsSensitiveText(raw.text) && san.text === raw.text) {
+                throw new Error(`Sensitive text remained in element ${raw.id || raw.tag}`);
+            }
             
             // Ensure password fields (incl. show-password text inputs) are always masked
             const ac = (san.autocomplete || '').toLowerCase();
@@ -32,6 +45,42 @@ export class PrivacyGate {
                 // The sanitized text must be a placeholder that starts with [PASSWORD
                 if (!san.text || !san.text.startsWith('[PASSWORD')) {
                     throw new Error("Password field not properly sanitized");
+                }
+            }
+
+            // Metadata is part of the planner payload too. Do not allow a raw
+            // value hidden in a label/attribute to bypass the DOM redaction.
+            for (const key of ['autocomplete', 'placeholder', 'ariaLabel', 'name', 'label']) {
+                const value = san[key];
+                if (this._containsSensitiveText(raw[key]) && value === raw[key]) {
+                    throw new Error(`Sensitive value remained in ${key}`);
+                }
+                if (typeof value === 'string' && (
+                    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(value) ||
+                    /\b(?:\d[ -]*?){13,19}\b/.test(value) ||
+                    /\b\d{4}\s?\d{4}\s?\d{4}\b/.test(value) ||
+                    /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4,10}/.test(value) ||
+                    /\b(?:ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.)/.test(value)
+                )) {
+                    throw new Error(`Sensitive value remained in ${key}`);
+                }
+            }
+            if (Array.isArray(san.options)) {
+                const rawOptions = Array.isArray(raw.options) ? raw.options : [];
+                for (let index = 0; index < san.options.length; index++) {
+                    const option = san.options[index];
+                    if (this._containsSensitiveText(rawOptions[index]) && option === rawOptions[index]) {
+                        throw new Error('Sensitive value remained in select options');
+                    }
+                    if (typeof option === 'string' && (
+                        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(option) ||
+                        /\b(?:\d[ -]*?){13,19}\b/.test(option) ||
+                        /\b\d{4}\s?\d{4}\s?\d{4}\b/.test(option) ||
+                        /(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{2,5}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4,10}/.test(option) ||
+                        /\b(?:ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.)/.test(option)
+                    )) {
+                        throw new Error('Sensitive value remained in select options');
+                    }
                 }
             }
         }

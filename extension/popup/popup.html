@@ -20,6 +20,7 @@
             <input id="secretEmail" type="email" placeholder="Local email" autocomplete="off" style="flex:1; padding:6px; border-radius:4px; border:1px solid #333; background:#1a1a1a; color:#fff;" />
             <input id="secretPassword" type="password" placeholder="Local password" autocomplete="off" style="flex:1; padding:6px; border-radius:4px; border:1px solid #333; background:#1a1a1a; color:#fff;" />
         </div>
+        <div class="secret-hint">Login tasks use these local fields. Values stay in this browser and are never sent to the backend.</div>
         <div style="display: flex; gap: 8px; width: 100%;">
             <button id="goBtn" class="btn btn-primary" style="flex: 1;">
                 <span class="btn-icon">▶</span> Go
@@ -33,6 +34,7 @@
     <div id="status-bar" class="status-bar">
         <span id="status-dot" class="dot dot-idle"></span>
         <span id="status-text">Idle</span>
+        <span id="route-mini" class="route-mini">Idle</span>
     </div>
 
     <!-- Tabs -->
@@ -64,6 +66,23 @@
                 <div class="stat-label">Actions</div>
             </div>
         </div>
+        <div class="route-section">
+            <div class="route-heading">
+                <h3>🧠 Model / execution route</h3>
+                <span id="route-live" class="route-live route-idle">Idle</span>
+            </div>
+            <div class="route-card">
+                <div class="route-primary">
+                    <span id="route-indicator" class="route-indicator route-idle"></span>
+                    <span id="route-label">No task running</span>
+                </div>
+                <div id="route-detail" class="route-detail">The route will appear when the agent starts.</div>
+                <div class="route-badges">
+                    <span id="model-badge" class="route-badge route-neutral">Model: —</span>
+                    <span id="execution-badge" class="route-badge route-neutral">Execution: —</span>
+                </div>
+            </div>
+        </div>
         <div class="timing-section">
             <h3>⏱ Pipeline Timing</h3>
             <div id="timing-bars"></div>
@@ -84,7 +103,7 @@
     <!-- Screenshot Tab -->
     <div class="tab-content" id="tab-screenshot">
         <div class="screenshot-container">
-            <div class="screenshot-label">Redacted Screenshot (sent to VLM)</div>
+            <div class="screenshot-label">Redacted screenshot (local preview / server only when needed)</div>
             <img id="redacted-img" class="screenshot-img" />
             <div id="screenshot-empty" class="empty-state">Run the agent to capture</div>
         </div>

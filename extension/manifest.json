@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "124",
   "name": "Privacy Vision Agent",
   "version": "0.1.0",
   "description": "Privacy-preserving browser vision agent.",
@@ -7,7 +8,8 @@
     "activeTab",
     "scripting",
     "storage",
-    "tabs"
+    "tabs",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -22,10 +24,24 @@
         "<all_urls>"
       ],
       "js": [
+        "lib/tesseract/tesseract.min.js",
         "content/content_bundle.js"
       ],
       "run_at": "document_idle",
       "all_frames": false
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/tesseract/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "action": {
