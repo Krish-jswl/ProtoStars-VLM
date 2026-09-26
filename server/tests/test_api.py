@@ -31,6 +31,28 @@ def test_valid_sanitized_request():
     assert data["actions"][0]["type"] == "click"
     assert data["actions"][0]["target"] == "mock_element_1"
 
+def test_disabled_provider_reports_an_explicit_error(monkeypatch):
+    """A disabled provider must not return an executable ``wait`` plan.
+
+    Regression: the disabled provider returned a bare ``wait`` action, which the
+    extension could not distinguish from a real instruction and executed every
+    cycle until its budget expired.
+    """
+    from app.main import provider as module_provider
+    from app.providers.disabled_vlm import DisabledVLMProvider
+
+    monkeypatch.setattr("app.main.provider", DisabledVLMProvider())
+    try:
+        response = client.post("/v1/agent/plan", json=valid_payload())
+        assert response.status_code == 200
+        data = response.json()
+        assert data["providerError"] is True
+        assert data["actions"] == []
+        assert data["providerErrorReason"]
+    finally:
+        monkeypatch.setattr("app.main.provider", module_provider)
+
+
 def test_malformed_request():
     response = client.post("/v1/agent/plan", json={"bad": "payload"})
     assert response.status_code == 422
